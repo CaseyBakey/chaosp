@@ -88,18 +88,15 @@ BUILD_REASON=""
 ANDROID_SDK_URL="https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip"
 MANIFEST_URL="https://android.googlesource.com/platform/manifest"
 CHROME_URL_LATEST="https://omahaproxy.appspot.com/all.json"
-STACK_URL_LATEST="https://api.github.com/repos/dan-v/rattlesnakeos-stack/releases/latest"
 FDROID_CLIENT_URL_LATEST="https://gitlab.com/api/v4/projects/36189/repository/tags"
 FDROID_PRIV_EXT_URL_LATEST="https://gitlab.com/api/v4/projects/1481578/repository/tags"
 KERNEL_SOURCE_URL="https://android.googlesource.com/kernel/msm"
 AOSP_URL_BUILD="https://developers.google.com/android/images"
 AOSP_URL_BRANCH="https://source.android.com/setup/start/build-numbers"
 
-STACK_UPDATE_MESSAGE=
-LATEST_STACK_VERSION=
-LATEST_CHROMIUM=74.0.3729.136
-FDROID_CLIENT_VERSION=1.6.1
-FDROID_PRIV_EXT_VERSION=0.2.9
+LATEST_CHROMIUM=
+FDROID_CLIENT_VERSION=
+FDROID_PRIV_EXT_VERSION=
 
 get_latest_versions() {
   log_header ${FUNCNAME}
@@ -144,8 +141,6 @@ get_latest_versions() {
   echo "FDROID_PRIV_EXT_VERSION: " $FDROID_PRIV_EXT_VERSION
   echo "AOSP_BUILD: " $AOSP_BUILD
   echo "AOSP_BRANCH: " $AOSP_BRANCH
-  exit 1
-
 }
 
 check_for_new_versions() {
@@ -210,9 +205,9 @@ check_for_new_versions() {
       message="No build is required, but IGNORE_VERSION_CHECKS=true"
       echo "$message"
       BUILD_REASON="$message"
-    # else
-    #   echo "AGM build not required as all components are already up to date."
-    #   exit 0
+    else
+      echo "CHAOSP build not required as all components are already up to date."
+      exit 0
     fi
   fi
 
@@ -225,12 +220,12 @@ full_run() {
   log_header ${FUNCNAME}
 
   get_latest_versions
-  exit 1
   check_for_new_versions
   initial_key_setup
-  echo "RattlesnakeOS Build STARTED"
+  echo "CHAOSP Build STARTED"
   setup_env
   check_chromium
+  revert_previous_run_patches
   aosp_repo_init
   aosp_repo_modifications
   aosp_repo_sync
@@ -246,7 +241,7 @@ full_run() {
   release "${DEVICE}"
   #aws_upload
   #checkpoint_versions
-  echo "RattlesnakeOS Build SUCCESS"
+  echo "CHAOSP Build SUCCESS"
 }
 
 get_encryption_key() {
@@ -325,7 +320,7 @@ initial_key_setup() {
       fi
     fi
 
-    sudo apt-get -y install gpg
+    # sudo apt-get -y install gpg
     if [ ! -e "$ENCRYPTION_PIPE" ]; then
       mkfifo $ENCRYPTION_PIPE
     fi
@@ -376,6 +371,7 @@ check_chromium() {
 }
 
 build_chromium() {
+  set -x
   log_header ${FUNCNAME}
 
   CHROMIUM_REVISION=$1
@@ -390,7 +386,8 @@ build_chromium() {
   # fetch chromium
   mkdir -p $CHAOSP_DIR/chromium
   cd $CHAOSP_DIR/chromium
-  fetch --nohooks android
+  # Fallback when updating chromium source after an previous fetch
+  fetch --nohooks android || git pull && gclient sync -D
   cd src
 
   # checkout specific revision
@@ -595,7 +592,9 @@ revert_previous_run_patches() {
 
   cd $BUILD_DIR
 
-  cd .repo/
+  cd .repo/manifests
+  git checkout -- .
+  cd ..
   rm manifest.xml
   ln -s manifests/default.xml manifest.xml
   cd -
@@ -1023,9 +1022,6 @@ release() {
       ;;
   esac
 
-
-  echo " ADD MAGISK NOW BEFORE IT'S TOO LATE!"
-  read magisk
 
   log "Running sign_target_files_apks"
   build/tools/releasetools/sign_target_files_apks -o -d "$KEY_DIR" "${AVB_SWITCHES[@]}" \
