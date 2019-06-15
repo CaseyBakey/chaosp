@@ -2,7 +2,7 @@
 
 ## Introduction  
 
-This project aims to help you build an AOSP ROM for one of the (Google) devices actually supported by AOSP, targeting Android 9 Pie onwards.  
+This project aims to help you build RattlesnakeOS, an AOSP ROM targeting the (Google) devices actually supported by AOSP, from Android 9 Pie onwards, locally, without using the AWS stack.  
 It's a mainly privacy/security focused ROM (no Google Play Services neither root by default).  
 Regarding this project name, and since we all like having a fully working smartphone with push notifications and so, it's also possible to bake in some patches before building the ROM.  
 At the end, you'll get a flashable ROM customized to your need.  
@@ -16,22 +16,25 @@ At the end, you'll get a flashable ROM customized to your need.
 * secure boot aka Android Verified Boot
 * Optional: OpenGapps (while still retaining locked bootloader)  
 * Optional: Magisk (while still retaining locked bootloader)  
-* Optional: misc. patches (custom bootanimation, add/delete entries in recovery menu, and so...)
+* Optional: misc. patches (custom bootanimation, add/delete entries in recovery menu, and so)  
 
 
 ## Setup
 
 The ROM will be built on your computer/server so, the prerequisites of AOSP has to be met: [Establishing a Build Environment](https://source.android.com/setup/build/initializing)  
+Keep in mind that AOSP and Chromium will be built in the process, so the whole build will take many hours.  
+I'm personally building this on a (quite powerful) computer (4c/8t Core i7, 32GB RAM, 1 TB SSD NVMe) with Ubuntu 18.04 and the whole thing is compiled under 5 hours (maybe less, can't remember)  
 
 
 ## TODO  
 * add an option in recovery menu to delete all Magisk-related settings/modules to avoid a lock-out situation (when bootloop occured, etc.)  
 * replace Chromium with Bromite as a Browser/WebView  
-* add an option to use microG Project instead of proprietary Google Play Services (when using OpenGapps)  
+* add an option to use [microG Project](https://microg.org/	) instead of proprietary Google Play Services (when using OpenGapps)  
+* find a way to build Magisk during the building of CHAOSP instead of downloading Magisk releases zip files from GitHub  
 
 ## Credits  
 * @thestinger for his work on the now deceased CopperheadOS, and newly started [GrapheneOS](https://github.com/GrapheneOS)  
-* @dan-v for his work on [RattlesnakeOS](https://github.com/dan-v/rattlesnakeos-stack) from which the majority of this project is inspired  
+* @dan-v for his work on [RattlesnakeOS](https://github.com/dan-v/rattlesnakeos-stack) from which near the integrity of the build Go template is re-used here  
 * @topjohnwu for the only FOSS Android rooting solution: [Magisk](https://github.com/topjohnwu/Magisk)  
 * @anestisb for his handy script allowing us to retrieve important missing and non-git commited binary blobs for our devices : [android-prepare-vendor](https://github.com/anestisb/android-prepare-vendor)  
 
