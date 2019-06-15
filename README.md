@@ -2,7 +2,7 @@
 
 ## Introduction  
 
-This project aims to help you build RattlesnakeOS, an AOSP ROM targeting the (Google) devices actually supported by AOSP, from Android 9 Pie onwards, locally, without using the AWS stack.  
+This project aims to help you build [RattlesnakeOS](https://github.com/RattlesnakeOS), an AOSP ROM targeting the (Google) devices actually supported by AOSP, from Android 9 Pie onwards, locally, without using the AWS stack.  
 It's a mainly privacy/security focused ROM (no Google Play Services neither root by default).  
 Regarding this project name, and since we all like having a fully working smartphone with push notifications and so, it's also possible to bake in some patches before building the ROM.  
 At the end, you'll get a flashable ROM customized to your need.  
@@ -10,7 +10,7 @@ At the end, you'll get a flashable ROM customized to your need.
 ## Features  
 
 * pure AOSP  
-* locally built (no proprietary cloud is used)  
+* locally built (no proprietary cloud used)  
 * signed with your keys (only you can push ROM updates to your phone)  
 * bootloader is relocked after first install: no rogue 'fastboot boot/fastboot flash' commands can be issued to your device  
 * secure boot aka Android Verified Boot
