@@ -1,6 +1,27 @@
 #!/bin/bash
 
 CHAOSP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+ADD_MAGISK=false
+ADD_OPENGAPPS=false
+
+usage(){
+  echo "./build.sh [-m (add Magisk)] [-g (add OpenGapps)] device_name"
+  exit 1
+}
+
+
+while getopts ":mgh" opt; do
+  case $opt in
+    m) ADD_MAGISK=true
+    ;;
+    g) ADD_OPENGAPPS=true
+    ;;
+    *) usage;;
+  esac
+done
+
+shift $(($OPTIND - 1))
+#remaining_args="$@"
 
 if [ $# -lt 1 ]; then
   echo "Need to specify device name as argument"
@@ -219,17 +240,18 @@ check_for_new_versions() {
 full_run() {
   log_header ${FUNCNAME}
 
+  revert_previous_run_patches
+
   get_latest_versions
   check_for_new_versions
   initial_key_setup
   echo "CHAOSP Build STARTED"
   setup_env
   check_chromium
-  revert_previous_run_patches
+  exit 1
   aosp_repo_init
   aosp_repo_modifications
   aosp_repo_sync
-  #aws_import_keys
   setup_vendor
   apply_patches
   # only marlin and sailfish need kernel rebuilt so that verity_key is included
@@ -237,10 +259,12 @@ full_run() {
     rebuild_marlin_kernel
   fi
   build_aosp
-  add_magisk
+
+  if [ "$ADD_MAGISK" = true ]; then
+    add_magisk
+  fi
+
   release "${DEVICE}"
-  #aws_upload
-  #checkpoint_versions
   echo "CHAOSP Build SUCCESS"
 }
 
@@ -371,7 +395,6 @@ check_chromium() {
 }
 
 build_chromium() {
-  set -x
   log_header ${FUNCNAME}
 
   CHROMIUM_REVISION=$1
@@ -387,7 +410,7 @@ build_chromium() {
   mkdir -p $CHAOSP_DIR/chromium
   cd $CHAOSP_DIR/chromium
   # Fallback when updating chromium source after an previous fetch
-  fetch --nohooks android || git pull && gclient sync -D
+  fetch --nohooks android || gclient sync -D --with_branch_heads --with_tags --jobs 32 -RDf && cd src && git fetch && cd -
   cd src
 
   # checkout specific revision
@@ -488,7 +511,7 @@ aosp_repo_modifications() {
       print "  <project path=\"packages/apps/Updater\" name=\"platform_packages_apps_Updater\" remote=\"github\" />";
       print "  <project path=\"packages/apps/F-Droid\" name=\"fdroidclient\" remote=\"fdroid\" revision=\"refs/tags/" FDROID_CLIENT_VERSION "\" />";
       print "  <project path=\"packages/apps/F-DroidPrivilegedExtension\" name=\"privileged-extension\" remote=\"fdroid\" revision=\"refs/tags/" FDROID_PRIV_EXT_VERSION "\" />";
-      print "  <project path=\"vendor/android-prepare-vendor\" name=\"android-prepare-vendor\" remote=\"prepare-vendor\" />"}' .repo/manifests/default.xml
+      print "  <project path=\"vendor/android-prepare-vendor\" name=\"android-prepare-vendor\" remote=\"prepare-vendor\" />"}' .repo/manifest.xml
  
     # remove things from manifest
     sed -i '/chromium-webview/d' .repo/manifest.xml
@@ -592,12 +615,9 @@ revert_previous_run_patches() {
 
   cd $BUILD_DIR
 
-  cd .repo/manifests
-  git checkout -- .
-  cd ..
-  rm manifest.xml
-  ln -s manifests/default.xml manifest.xml
-  cd -
+  # cd .repo/
+  # cp manifests/default.xml manifest.xml
+  # cd -
 
   cd ./frameworks/base/
   git checkout -- .
@@ -659,9 +679,9 @@ revert_previous_run_patches() {
   git clean -f
   cd -
 
-  # cd ./device/google/crosshatch/
-  # git checkout -- .
-  # cd -
+  cd ./device/google/crosshatch/
+  git checkout -- .
+  cd -
 
   cd ./packages/apps/Updater/
   git checkout -- .
