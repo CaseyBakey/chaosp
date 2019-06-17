@@ -248,7 +248,6 @@ full_run() {
   echo "CHAOSP Build STARTED"
   setup_env
   check_chromium
-  exit 1
   aosp_repo_init
   aosp_repo_modifications
   aosp_repo_sync
