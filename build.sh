@@ -613,85 +613,13 @@ patch_aosp_removals() {
 revert_previous_run_patches() {
   log_header ${FUNCNAME}
 
-  cd $BUILD_DIR
+  if [ -d $BUILD_DIR ]; then
+    cd $BUILD_DIR
 
-  # cd .repo/
-  # cp manifests/default.xml manifest.xml
-  # cd -
+    #repo sync -d
+    repo forall -vc "git reset --hard"
 
-  cd ./frameworks/base/
-  git checkout -- .
-  git clean -f
-  cd -
-
-  cd ./system/core/
-  git checkout -- .
-  git clean -f
-  cd -
-
-  cd ./frameworks/native/
-  git checkout -- .
-  git clean -f
-  cd -
-
-  cd ./packages/apps/F-Droid/
-  git checkout -- .
-  git clean -f
-  cd -
-
-  cd ./packages/apps/F-DroidPrivilegedExtension/
-  git checkout -- .
-  git clean -f
-  cd -
-
-  cd ./bootable/recovery/
-  git checkout device.cpp
-  git clean -f
-  cd -
-
-  cd ./build/make/
-  git checkout -- .
-  git clean -f
-  cd -
-
-  cd .repo/manifests/
-  git checkout default.xml
-  git clean -f
-  cd -
-
-  cd ./device/common/
-  git checkout -- .
-  git clean -f
-  cd -
-
-  cd ./device/google/marlin/
-  git checkout -- .
-  git clean -f
-  cd -
-
-  cd ./device/google/taimen/
-  git checkout -- .
-  git clean -f
-  cd -
-
-  cd ./device/google/muskie/
-  git checkout -- .
-  git clean -f
-  cd -
-
-  cd ./device/google/crosshatch/
-  git checkout -- .
-  cd -
-
-  cd ./packages/apps/Updater/
-  git checkout -- .
-  git clean -f
-  cd -
-   
-  cd ./packages/apps/Launcher3/
-  git checkout -- .
-  git clean -f
-  cd -
+  fi
 
 }
 
