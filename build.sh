@@ -1085,15 +1085,26 @@ retry() {
 
 # This dirty-as-fuck function is needed to add the magiskinit binary into the ramdisk of the BOOT image (which is, in fact, the recovery's ramdisk on system-as-root device)
 add_magisk(){
+  #https://stackoverflow.com/questions/3601515/how-to-check-if-a-variable-is-set-in-bash
+  if [ -z ${BUILD_NUMBER+x} ]; then
+    BUILD_NUMBER=$(cat $BUILD_DIR/out/build_number.txt 2>/dev/null)
+  fi
+
+  rm -rf $CHAOSP_DIR/workdir
+
+  mkdir -p $CHAOSP_DIR/workdir
+
+  cd $CHAOSP_DIR/workdir
+
   # Download latest Magisk release
-  curl -s https://api.github.com/repos/topjohnwu/Magisk/releases/latest | grep "Magisk-v.*.zip" | cut -d  : -f 2,3 | grep -i https | tr -d \" | wget -O magisk-latest.zip -qi -
+  curl -s https://api.github.com/repos/topjohnwu/Magisk/releases | grep "Magisk-v.*.zip" |grep https|head -n 1| cut -d : -f 2,3|tr -d \" | wget -O magisk-latest.zip -qi -
   
   # Extract the downloaded zip
   unzip -d magisk-latest magisk-latest.zip 
 
   # Move the original init binary to the place where Magisk expects it to be
-  mkdir $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/.backup
-  mv $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/{init,.backup/init}
+  mkdir -p $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/.backup
+  cp -n $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/{init,.backup/init}
 
   # Copy the downloaded magiskinit binary to the place of the original init binary
   cp magisk-latest/arm/magiskinit64 $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/init
@@ -1113,7 +1124,7 @@ EOF
 
   # Separate kernel and separate DTB files
   cd extract-dtb
-  python ./extract-dtb.py $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/kernel
+  python3 ./extract-dtb.py $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/kernel
 
   # Uncompress the kernel
   lz4 -d dtb/00_kernel dtb/uncompressed_kernel
@@ -1135,7 +1146,7 @@ EOF
   done
 
   # Remove target files zip
-  rm BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER.zip
+  rm -f BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER.zip
 
   # Rezip target files
   cd $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_blueline-target_files-$BUILD_NUMBER
