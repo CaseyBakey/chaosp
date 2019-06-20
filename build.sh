@@ -251,6 +251,7 @@ full_run() {
   aosp_repo_init
   aosp_repo_modifications
   aosp_repo_sync
+  gen_keys
   setup_vendor
   apply_patches
   # only marlin and sailfish need kernel rebuilt so that verity_key is included
@@ -1077,15 +1078,19 @@ gen_keys() {
 
   mkdir -p "${KEYS_DIR}/${DEVICE}"
   cd "${KEYS_DIR}/${DEVICE}"
-  for key in {releasekey,platform,shared,media,verity} ; do
-    # make_key exits with unsuccessful code 1 instead of 0, need ! to negate
-    ! "${BUILD_DIR}/development/tools/make_key" "$key" "$CERTIFICATE_SUBJECT"
-  done
+  if [ -z "$(ls -A ${KEYS_DIR}/${DEVICE})" ]; then
+    for key in {releasekey,platform,shared,media,verity} ; do
+      # make_key exits with unsuccessful code 1 instead of 0, need ! to negate
+      ! "${BUILD_DIR}/development/tools/make_key" "$key" "$CERTIFICATE_SUBJECT"
+    done
 
-  if [ "${AVB_MODE}" == "verity_only" ]; then
-    gen_verity_key "${DEVICE}"
+    if [ "${AVB_MODE}" == "verity_only" ]; then
+      gen_verity_key "${DEVICE}"
+    else
+      gen_avb_key "${DEVICE}"
+    fi
   else
-    gen_avb_key "${DEVICE}"
+    echo "${KEYS_DIR}/${DEVICE} folder not empty! Won't generate new keys!"
   fi
 }
 
