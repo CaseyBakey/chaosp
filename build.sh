@@ -4,6 +4,11 @@ CHAOSP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 ADD_MAGISK=false
 ADD_OPENGAPPS=false
 
+mkdir -p $CHAOSP_DIR/revisions
+mkdir -p $CHAOSP_DIR/revisions/fdroid
+mkdir -p $CHAOSP_DIR/revisions/fdroid-priv
+
+
 usage(){
   echo "./build.sh [-m (add Magisk)] [-g (add OpenGapps)] device_name"
   exit 1
@@ -172,7 +177,7 @@ check_for_new_versions() {
 
 
   # check aosp
-  existing_aosp_build=$(cat $CHAOSP_DIR/${DEVICE}-vendor || true)
+  existing_aosp_build=$(cat $CHAOSP_DIR/revisions/${DEVICE}-vendor || true)
   if [ "$existing_aosp_build" == "$AOSP_BUILD" ]; then
     echo "AOSP build ($existing_aosp_build) is up to date"
   else
@@ -196,7 +201,7 @@ check_for_new_versions() {
   fi
 
   # check fdroid
-  existing_fdroid_client=$(cat $CHAOSP_DIR/fdroid/revision || true)
+  existing_fdroid_client=$(cat $CHAOSP_DIR/revisions/fdroid/revision || true)
   if [ "$existing_fdroid_client" == "$FDROID_CLIENT_VERSION" ]; then
     echo "F-Droid build ($existing_fdroid_client) is up to date"
   else
@@ -206,7 +211,7 @@ check_for_new_versions() {
   fi
 
   # check fdroid priv extension
-  existing_fdroid_priv_version=$(cat $CHAOSP_DIR/fdroid-priv/revision || true)
+  existing_fdroid_priv_version=$(cat $CHAOSP_DIR/revisions/fdroid-priv/revision || true)
   if [ "$existing_fdroid_priv_version" == "$FDROID_PRIV_EXT_VERSION" ]; then
     echo "F-Droid privileged extension build ($existing_fdroid_priv_version) is up to date"
   else
