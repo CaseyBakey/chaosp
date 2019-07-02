@@ -7,6 +7,7 @@ It's a mainly privacy/security focused ROM (no Google Play Services neither root
 Regarding this project name, and since we all like having a fully working smartphone with push notifications and so, it's also possible to bake in some patches before building the ROM.  
 At the end, you'll get a flashable ROM customized to your need.  
 
+
 ## Features  
 
 * pure AOSP  
@@ -27,12 +28,18 @@ Keep in mind that AOSP and Chromium will be built in the process, so the whole b
 I'm personally building this on a (quite powerful) computer (4c/8t Core i7, 32GB RAM, 1 TB SSD NVMe) with Ubuntu 18.04 and the whole thing is compiled under 5 hours (maybe less, can't remember)  
 
 
-## Usage  
+## Building  
 
 ./prerequisites.sh  
 ./build.sh [-m] device  
 
 The -m argument will build Magisk in.  
+
+
+## Flashing  
+
+Once the build is done you'll find yourself with flashable zip files within $CHAOSP_DIR/out/release-$DEVICE-$BUILD_NUMBER/  
+You can now follow the same guide than RattlesnakeOS: [Flashing guide]https://github.com/dan-v/rattlesnakeos-stack/blob/9.0/FLASHING.md  
 
 
 ## TODO  
@@ -41,6 +48,7 @@ The -m argument will build Magisk in.
 * replace Chromium with Bromite as a Browser/WebView  
 * add an option to use [microG Project](https://microg.org/) instead of proprietary Google Play Services (when using OpenGapps)  
 * find a way to build Magisk during the building of CHAOSP instead of downloading Magisk releases zip files from GitHub  
+
 
 ## Credits  
 * @thestinger for his work on the now deceased CopperheadOS, and newly started [GrapheneOS](https://github.com/GrapheneOS)  
