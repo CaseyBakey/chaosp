@@ -652,9 +652,9 @@ patch_custom() {
   # log "Applying patch 00002-microg-sigspoof.patch"
   # patch -p1 --no-backup-if-mismatch < ${patches_dir}/microg/00002-microg-sigspoof.patch
 
-  # if [ ! -d ${patches_dir}/community_patches ]; then
-  #   retry git clone https://github.com/RattlesnakeOS/community_patches ${patches_dir}/community_patches
-  # fi
+  if [ ! -d ${patches_dir}/community_patches ]; then
+    retry git clone https://github.com/RattlesnakeOS/community_patches ${patches_dir}/community_patches
+  fi
  
   log "Applying patch 00001-global-internet-permission-toggle.patch"
   patch -p1 --no-backup-if-mismatch < ${patches_dir}/community_patches/00001-global-internet-permission-toggle.patch
