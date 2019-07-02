@@ -39,7 +39,7 @@ The -m argument will build Magisk in.
 ## Flashing  
 
 Once the build is done you'll find yourself with flashable zip files within $CHAOSP_DIR/out/release-$DEVICE-$BUILD_NUMBER/  
-You can now follow the same guide than RattlesnakeOS: [Flashing guide]https://github.com/dan-v/rattlesnakeos-stack/blob/9.0/FLASHING.md  
+You can now follow the same guide than RattlesnakeOS: [Flashing guide](https://github.com/dan-v/rattlesnakeos-stack/blob/9.0/FLASHING.md)  
 
 
 ## TODO  
