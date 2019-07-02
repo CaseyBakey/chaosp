@@ -30,9 +30,13 @@ I'm personally building this on a (quite powerful) computer (4c/8t Core i7, 32GB
 ## Usage  
 
 ./prerequisites.sh  
-./build.sh -m -g device  
+./build.sh [-m] device  
+
+The -m argument will build Magisk in.  
+
 
 ## TODO  
+* add a -g argument to the script to toggle or not, the integration of OpenGapps (actually, pico package is always built-in)  
 * add an option in recovery menu to delete all Magisk-related settings/modules to avoid a lock-out situation (when bootloop occured, etc.)  
 * replace Chromium with Bromite as a Browser/WebView  
 * add an option to use [microG Project](https://microg.org/) instead of proprietary Google Play Services (when using OpenGapps)  
