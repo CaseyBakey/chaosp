@@ -249,7 +249,7 @@ full_run() {
 
   get_latest_versions
   check_for_new_versions
-  initial_key_setup
+  #initial_key_setup
   echo "CHAOSP Build STARTED"
   setup_env
   check_chromium
@@ -622,7 +622,7 @@ revert_previous_run_patches() {
     cd $BUILD_DIR
 
     #repo sync -d
-    repo forall -vc "git reset --hard"
+    repo forall -vc "git reset --hard" || true
 
   fi
 
@@ -681,9 +681,9 @@ patch_custom() {
   # <% end %>
   # <% end %>
 
-  # if [ ! -d ${scripts_dir}/example_patch_shellscript ]; then
-  #   retry git clone "https://github.com/RattlesnakeOS/example_patch_shellscript" ${scripts_dir}/example_patch_shellscript
-  # fi
+  if [ ! -d ${scripts_dir}/example_patch_shellscript ]; then
+    retry git clone "https://github.com/RattlesnakeOS/example_patch_shellscript" ${scripts_dir}/example_patch_shellscript || true
+  fi
   log "Applying shell script 00002-custom-boot-animation.sh"
   . ${scripts_dir}/example_patch_shellscript/00002-custom-boot-animation.sh
 
@@ -1151,7 +1151,7 @@ EOF
   done
 
   # Remove target files zip
-  rm -f BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER.zip
+  rm -f $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER.zip
 
   # Rezip target files
   cd $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_blueline-target_files-$BUILD_NUMBER
