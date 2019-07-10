@@ -503,14 +503,14 @@ aosp_repo_modifications() {
       print "  <remote name=\"fdroid\" fetch=\"https://gitlab.com/fdroid/\" />";
       print "  <remote name=\"prepare-vendor\" fetch=\"https://github.com/anestisb/\" revision=\"master\" />";  
       print "  <remote name=\"opengapps\" fetch=\"https://github.com/opengapps/\"  />";
-      print "  <remote name=\"nezor\" fetch=\"https://gitlab.nezorfla.me/opengapps/\"  />";
+      print "  <remote name=\"gitlab\" fetch=\"https://gitlab.opengapps.org/opengapps/\"  />";
       
       print "  ";
 
       print "  <project path=\"vendor/opengapps/build\" name=\"aosp_build\" revision=\"master\" remote=\"opengapps\" />";
-      print "  <project path=\"vendor/opengapps/sources/all\" name=\"all\" clone-depth=\"1\" revision=\"master\" remote=\"nezor\" />";
-      print "  <project path=\"vendor/opengapps/sources/arm\" name=\"arm\" clone-depth=\"1\" revision=\"master\" remote=\"nezor\" />";
-      print "  <project path=\"vendor/opengapps/sources/arm64\" name=\"arm64\" clone-depth=\"1\" revision=\"master\" remote=\"nezor\" />";
+      print "  <project path=\"vendor/opengapps/sources/all\" name=\"all\" clone-depth=\"1\" revision=\"master\" remote=\"gitlab\" />";
+      print "  <project path=\"vendor/opengapps/sources/arm\" name=\"arm\" clone-depth=\"1\" revision=\"master\" remote=\"gitlab\" />";
+      print "  <project path=\"vendor/opengapps/sources/arm64\" name=\"arm64\" clone-depth=\"1\" revision=\"master\" remote=\"gitlab\" />";
 
       print "  <project path=\"external/chromium\" name=\"platform_external_chromium\" remote=\"github\" />";
       print "  <project path=\"packages/apps/Updater\" name=\"platform_packages_apps_Updater\" remote=\"github\" />";
