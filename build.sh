@@ -1154,8 +1154,8 @@ EOF
   rm -f $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER.zip
 
   # Rezip target files
-  cd $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_blueline-target_files-$BUILD_NUMBER
-  zip --symlinks -r ../aosp_blueline-target_files-$BUILD_NUMBER.zip *
+  cd $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER
+  zip --symlinks -r ../aosp_$DEVICE-target_files-$BUILD_NUMBER.zip *
   cd -
 
 }
