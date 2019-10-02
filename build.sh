@@ -270,6 +270,7 @@ full_run() {
   fi
 
   release "${DEVICE}"
+  checkpoint_versions
   echo "CHAOSP Build SUCCESS"
 }
 
@@ -480,19 +481,6 @@ aosp_repo_modifications() {
   # make modifications to default AOSP
   if ! grep -q "RattlesnakeOS" .repo/manifest.xml; then
     # really ugly awk script to add additional repos to manifest
-
-#      print "  <remote name=\"DirtyUnicorns\" fetch=\"https://github.com/DirtyUnicorns/\" revision=\"p9x\" />";
-#      print "  <project path=\"external/google\" name=\"android_external_google\" remote=\"DirtyUnicorns\" />"; 
-
-      # print "  <remote name=\"opengapps\" fetch=\"https://github.com/opengapps/\"  />";
-      # print "  <remote name=\"nezor\" fetch=\"https://gitlab.nezorfla.me/opengapps/\"  />";
-      # print "  ";
-     
-      # print "  <project path=\"vendor/opengapps/build\" name=\"aosp_build\" revision=\"master\" remote=\"opengapps\" />";
-      # print "  <project path=\"vendor/opengapps/sources/all\" name=\"all\" clone-depth=\"1\" revision=\"master\" remote=\"nezor\" />";
-      # print "  <project path=\"vendor/opengapps/sources/arm\" name=\"arm\" clone-depth=\"1\" revision=\"master\" remote=\"nezor\" />";
-      # print "  <project path=\"vendor/opengapps/sources/arm64\" name=\"arm64\" clone-depth=\"1\" revision=\"master\" remote=\"nezor\" />";
-
     awk -i inplace \
       -v ANDROID_VERSION="$ANDROID_VERSION" \
       -v FDROID_CLIENT_VERSION="$FDROID_CLIENT_VERSION" \
@@ -1005,6 +993,16 @@ release() {
   log "Running compress of factory image with pxz"
   time pxz -v -T0 -9 -z $DEVICE-factory-$BUILD_NUMBER.tar
 }
+
+
+checkpoint_versions() {
+  log_header ${FUNCNAME}
+
+  # checkpoint f-droid
+  echo "${FDROID_PRIV_EXT_VERSION}" > $CHAOSP_DIR/revisions/fdroid-priv/revision"
+  echo "${FDROID_CLIENT_VERSION}" > $CHAOSP_DIR/revisions/fdroid/revision"
+}
+
 
 gen_keys() {
   log_header ${FUNCNAME}
