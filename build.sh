@@ -51,10 +51,12 @@ case "$DEVICE" in
   crosshatch|blueline)
     DEVICE_FAMILY=crosshatch
     AVB_MODE=vbmeta_chained
+    EXTRA_OTA=(--retrofit_dynamic_partitions)
     ;;
   sargo|bonito)
     DEVICE_FAMILY=bonito
     AVB_MODE=vbmeta_chained
+    EXTRA_OTA=(--retrofit_dynamic_partitions)
     ;;
   *)
     echo "warning: unknown device $DEVICE, using Pixel 3 defaults"
@@ -83,7 +85,7 @@ ENCRYPTION_KEY=
 ENCRYPTION_PIPE="/tmp/key"
 
 # pin to specific version of android
-ANDROID_VERSION="9.0"
+ANDROID_VERSION="10.0"
 
 # build type (user or userdebug)
 BUILD_TYPE="user"
@@ -100,7 +102,7 @@ SECONDS=0
 BUILD_TARGET="release aosp_${DEVICE} ${BUILD_TYPE}"
 RELEASE_URL="https://${AWS_RELEASE_BUCKET}.s3.amazonaws.com"
 RELEASE_CHANNEL="${DEVICE}-${BUILD_CHANNEL}"
-CHROME_CHANNEL="stable"
+CHROME_CHANNEL="dev"
 BUILD_DATE=$(date +%Y.%m.%d.%H)
 BUILD_TIMESTAMP=$(date +%s)
 BUILD_DIR="$CHAOSP_DIR/rattlesnake-os"
@@ -258,11 +260,13 @@ full_run() {
   aosp_repo_sync
   gen_keys
   setup_vendor
+  build_fdroid
   apply_patches
   # only marlin and sailfish need kernel rebuilt so that verity_key is included
   if [ "${DEVICE}" == "marlin" ] || [ "${DEVICE}" == "sailfish" ]; then
     rebuild_marlin_kernel
   fi
+  #add_chromium
   build_aosp
 
   if [ "$ADD_MAGISK" = true ]; then
@@ -272,6 +276,30 @@ full_run() {
   release "${DEVICE}"
   checkpoint_versions
   echo "CHAOSP Build SUCCESS"
+}
+
+# add_chromium() {
+#   log_header ${FUNCNAME}
+
+#   # replace AOSP webview with latest built chromium webview
+#   aws s3 cp "s3://${AWS_RELEASE_BUCKET}/chromium/SystemWebView.apk" ${BUILD_DIR}/external/chromium-webview/prebuilt/arm64/webview.apk
+
+#   # add latest built chromium browser to external/chromium
+#   aws s3 cp "s3://${AWS_RELEASE_BUCKET}/chromium/ChromeModernPublic.apk" ${BUILD_DIR}/external/chromium/prebuilt/arm64/
+# }
+
+build_fdroid() {
+  log_header ${FUNCNAME}
+
+  # build it outside AOSP build tree or hit errors
+  git clone https://gitlab.com/fdroid/fdroidclient ${HOME}/fdroidclient
+  pushd ${HOME}/fdroidclient
+  echo "sdk.dir=${HOME}/sdk" > local.properties
+  echo "sdk.dir=${HOME}/sdk" > app/local.properties
+  git checkout $FDROID_CLIENT_VERSION
+  retry ./gradlew assembleRelease
+  cp -f app/build/outputs/apk/full/release/app-full-release-unsigned.apk ${BUILD_DIR}/packages/apps/F-Droid/F-Droid.apk
+  popd
 }
 
 get_encryption_key() {
@@ -392,7 +420,8 @@ check_chromium() {
   log "Chromium latest: $LATEST_CHROMIUM"
   if [ "$LATEST_CHROMIUM" == "$current" ]; then
     log "Chromium latest ($LATEST_CHROMIUM) matches current ($current) - just copying chromium artifact"
-    cp $CHAOSP_DIR/chromium/MonochromePublic.apk ${BUILD_DIR}/external/chromium/prebuilt/arm64/
+    cp $CHAOSP_DIR/SystemWebView.apk ${BUILD_DIR}/external/chromium-webview/prebuilt/arm64/webview.apk
+    cp $CHAOSP_DIR/ChromeModernPublic.apk ${BUILD_DIR}/external/chromium/prebuilt/arm64/
   else
     log "Building chromium $LATEST_CHROMIUM"
     build_chromium $LATEST_CHROMIUM
@@ -454,14 +483,18 @@ android_default_version_code = "$DEFAULT_VERSION"
 EOF
   gn gen out/Default
 
-  log "Building chromium monochrome_public target"
-  autoninja -C out/Default/ monochrome_public_apk
+  log "Building chromium system_webview_apk target"
+  autoninja -C out/Default/ system_webview_apk
+  log "Building chromium chrome_modern_public_apk target"
+  autoninja -C out/Default/ chrome_modern_public_apk
 
   # copy to build tree
   mkdir -p ${BUILD_DIR}/external/chromium/prebuilt/arm64
-  cp out/Default/apks/MonochromePublic.apk ${BUILD_DIR}/external/chromium/prebuilt/arm64/
+  cp "out/Default/apks/SystemWebView.apk" ${BUILD_DIR}/external/chromium-webview/prebuilt/arm64/webview.apk
+  cp "out/Default/apks/ChromeModernPublic.apk" ${BUILD_DIR}/external/chromium/prebuilt/arm64/
   # copy this apk outside of chromium folder, in case of
-  cp out/Default/apks/MonochromePublic.apk $CHAOSP_DIR/
+  cp "out/Default/apks/SystemWebView.apk" $CHAOSP_DIR/
+cp "out/Default/apks/ChromeModernPublic.apk" $CHAOSP_DIR/
 
   # upload to s3 for future builds
   echo "${CHROMIUM_REVISION}" > $CHAOSP_DIR/chromium/revision
@@ -478,6 +511,7 @@ aosp_repo_modifications() {
   log_header ${FUNCNAME}
   cd "${BUILD_DIR}"
 
+  # TODO: remove revision=dev from platform_external_chromium in future release, didn't want to break build for anyone on beta 10.x build
   # make modifications to default AOSP
   if ! grep -q "RattlesnakeOS" .repo/manifest.xml; then
     # really ugly awk script to add additional repos to manifest
@@ -502,12 +536,11 @@ aosp_repo_modifications() {
 
       print "  <project path=\"external/chromium\" name=\"platform_external_chromium\" remote=\"github\" />";
       print "  <project path=\"packages/apps/Updater\" name=\"platform_packages_apps_Updater\" remote=\"github\" />";
-      print "  <project path=\"packages/apps/F-Droid\" name=\"fdroidclient\" remote=\"fdroid\" revision=\"refs/tags/" FDROID_CLIENT_VERSION "\" />";
+      print "  <project path=\"packages/apps/F-Droid\" name=\"platform_external_fdroid\" remote=\"github\" />";
       print "  <project path=\"packages/apps/F-DroidPrivilegedExtension\" name=\"privileged-extension\" remote=\"fdroid\" revision=\"refs/tags/" FDROID_PRIV_EXT_VERSION "\" />";
       print "  <project path=\"vendor/android-prepare-vendor\" name=\"android-prepare-vendor\" remote=\"prepare-vendor\" />"}' .repo/manifest.xml
  
     # remove things from manifest
-    sed -i '/chromium-webview/d' .repo/manifest.xml
     sed -i '/packages\/apps\/Browser2/d' .repo/manifest.xml
     sed -i '/packages\/apps\/Calendar/d' .repo/manifest.xml
     sed -i '/packages\/apps\/QuickSearchBox/d' .repo/manifest.xml
@@ -556,13 +589,38 @@ apply_patches() {
   patch_add_apps
   #patch_tethering
   patch_base_config
+  patch_settings_app
   patch_device_config
-  patch_chromium_webview
+  #patch_chromium_webview
   patch_updater
-  patch_fdroid
+  #patch_fdroid
   patch_priv_ext
   patch_launcher
-  patch_vendor_security_level
+  #patch_vendor_security_level
+  patch_broken_alarmclock
+  patch_disable_apex
+}
+
+# currently don't have a need for apex updates (https://source.android.com/devices/tech/ota/apex)
+patch_disable_apex() {
+  log_header ${FUNCNAME}
+
+  # pixel 1 devices do not support apex so nothing to patch
+  # pixel 2 devices opt in here
+  sed -i 's@$(call inherit-product, $(SRC_TARGET_DIR)/product/updatable_apex.mk)@@' ${BUILD_DIR}/device/google/wahoo/device.mk
+  # all other devices use mainline and opt in here
+  sed -i 's@$(call inherit-product, $(SRC_TARGET_DIR)/product/updatable_apex.mk)@@' ${BUILD_DIR}/build/make/target/product/mainline_system.mk
+}
+
+# TODO: remove once this once fix from upstream makes it into release branch
+# https://android.googlesource.com/platform/packages/apps/DeskClock/+/e6351b3b85b2f5d53d43e4797d3346ce22a5fa6f%5E%21/
+patch_broken_alarmclock() {
+  log_header ${FUNCNAME}
+
+  if ! grep -q "android.permission.FOREGROUND_SERVICE" ${BUILD_DIR}/packages/apps/DeskClock/AndroidManifest.xml; then
+    sed -i '/<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" \/>/a <uses-permission android:name="android.permission.FOREGROUND_SERVICE" \/>' ${BUILD_DIR}/packages/apps/DeskClock/AndroidManifest.xml
+    sed -i 's@<uses-sdk android:minSdkVersion="19" android:targetSdkVersion="28" />@<uses-sdk android:minSdkVersion="19" android:targetSdkVersion="25" />@' ${BUILD_DIR}/packages/apps/DeskClock/AndroidManifest.xml
+  fi
 }
 
 # This patch is needed to be able to add "." prefixed files/folders (like ".backup" and ".magisk") from Magisk, into the boot image
@@ -583,12 +641,12 @@ patch_aosp_removals() {
   log_header ${FUNCNAME}
 
   # remove aosp chromium webview directory
-  rm -rf ${BUILD_DIR}/platform/external/chromium-webview
+  #rm -rf ${BUILD_DIR}/platform/external/chromium-webview
 
   # loop over all make files as these keep changing and remove components
   for mk_file in ${BUILD_DIR}/build/make/target/product/*.mk; do
     # remove aosp webview
-    sed -i '/webview \\/d' ${mk_file}
+    #sed -i '/webview \\/d' ${mk_file}
 
     # remove Browser2
     sed -i '/Browser2/d' ${mk_file}
@@ -731,6 +789,13 @@ patch_vendor_security_level() {
   sed -i 's@2018-09-05@'${VENDOR_SECURITY_PATCH_LEVEL}'@' ${BUILD_DIR}/device/google/crosshatch/device-common.mk || true
 }
 
+patch_settings_app() {
+  log_header ${FUNCNAME}
+
+  # fix for cards not disappearing in settings app
+  sed -i 's@<bool name="config_use_legacy_suggestion">true</bool>@<bool name="config_use_legacy_suggestion">false</bool>@' ${BUILD_DIR}/packages/apps/Settings/res/values/config.xml
+}
+
 patch_device_config() {
   log_header ${FUNCNAME}
 
@@ -745,7 +810,7 @@ patch_device_config() {
 
   sed -i 's@PRODUCT_MODEL := AOSP on crosshatch@PRODUCT_MODEL := Pixel 3 XL@' ${BUILD_DIR}/device/google/crosshatch/aosp_crosshatch.mk || true
   sed -i 's@PRODUCT_MODEL := AOSP on blueline@PRODUCT_MODEL := Pixel 3@' ${BUILD_DIR}/device/google/crosshatch/aosp_blueline.mk || true
-  
+
   sed -i 's@PRODUCT_MODEL := AOSP on bonito@PRODUCT_MODEL := Pixel 3a XL@' ${BUILD_DIR}/device/google/bonito/aosp_bonito.mk || true
   sed -i 's@PRODUCT_MODEL := AOSP on sargo@PRODUCT_MODEL := Pixel 3a@' ${BUILD_DIR}/device/google/bonito/aosp_sargo.mk || true
 }
@@ -777,15 +842,10 @@ patch_fdroid() {
 }
 
 get_package_mk_file() {
-  # this is newer location in master
   mk_file=${BUILD_DIR}/build/make/target/product/handheld_system.mk
   if [ ! -f ${mk_file} ]; then
-    # this is older location
-    mk_file=${BUILD_DIR}/build/make/target/product/core.mk
-    if [ ! -f ${mk_file} ]; then
-      log "Expected handheld_system.mk or core.mk do not exist"
-      exit 1
-    fi
+    log "Expected handheld_system.mk or core.mk do not exist"
+    exit 1
   fi
   echo ${mk_file}
 }
@@ -863,19 +923,20 @@ rebuild_marlin_kernel() {
   git checkout ${kernel_commit_id}
 
   # run in another shell to avoid it mucking with environment variables for normal AOSP build
-  bash -c "\
-    set -e;
-    cd ${BUILD_DIR};
-    . build/envsetup.sh;
-    make -j$(nproc --all) dtc mkdtimg;
-    export PATH=${BUILD_DIR}/out/host/linux-x86/bin:${PATH};
-    ln --verbose --symbolic ${KEYS_DIR}/${DEVICE}/verity_user.der.x509 ${MARLIN_KERNEL_SOURCE_DIR}/verity_user.der.x509;
-    cd ${MARLIN_KERNEL_SOURCE_DIR};
-    make -j$(nproc --all) ARCH=arm64 marlin_defconfig;
-    make -j$(nproc --all) ARCH=arm64 CONFIG_COMPAT_VDSO=n CROSS_COMPILE=${BUILD_DIR}/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-;
-    cp -f arch/arm64/boot/Image.lz4-dtb ${BUILD_DIR}/device/google/marlin-kernel/;
-    rm -rf ${BUILD_DIR}/out/build_*;
-  "
+  (
+      set -e;
+      export PATH="${BUILD_DIR}/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin:${PATH}";
+      export PATH="${BUILD_DIR}/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/bin:${PATH}";
+      export PATH="${BUILD_DIR}/prebuilts/misc/linux-x86/lz4:${PATH}";
+      export PATH="${BUILD_DIR}/prebuilts/misc/linux-x86/dtc:${PATH}";
+      export PATH="${BUILD_DIR}/prebuilts/misc/linux-x86/libufdt:${PATH}";
+      ln --verbose --symbolic ${KEYS_DIR}/${DEVICE}/verity_user.der.x509 ${MARLIN_KERNEL_SOURCE_DIR}/verity_user.der.x509;
+      cd ${MARLIN_KERNEL_SOURCE_DIR};
+      make O=out ARCH=arm64 marlin_defconfig;
+      make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi-
+      cp -f out/arch/arm64/boot/Image.lz4-dtb ${BUILD_DIR}/device/google/marlin-kernel/;
+      rm -rf ${BUILD_DIR}/out/build_*;
+  )
 }
 
 build_aosp() {
@@ -935,7 +996,7 @@ release() {
   RADIO=$(get_radio_image baseband google_devices/${DEVICE})
   PREFIX=aosp_
   BUILD=$BUILD_NUMBER
-  VERSION=$(grep -Po "export BUILD_ID=\K.+" build/core/build_id.mk | tr '[:upper:]' '[:lower:]')
+  VERSION=$(grep -Po "BUILD_ID=\K.+" build/core/build_id.mk | tr '[:upper:]' '[:lower:]')
   PRODUCT=${DEVICE}
   TARGET_FILES=$DEVICE-target_files-$BUILD.zip
 
@@ -963,22 +1024,20 @@ release() {
       ;;
   esac
 
+  export PATH=$BUILD_DIR/prebuilts/build-tools/linux-x86/bin:$PATH
 
   log "Running sign_target_files_apks"
-  build/tools/releasetools/sign_target_files_apks -o -d "$KEY_DIR" "${AVB_SWITCHES[@]}" \
+  build/tools/releasetools/sign_target_files_apks -o -d "$KEY_DIR" -k "build/target/product/security/networkstack=${KEY_DIR}/networkstack" "${AVB_SWITCHES[@]}" \
     out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/$PREFIX$DEVICE-target_files-$BUILD_NUMBER.zip \
     $OUT/$TARGET_FILES
-
 
   log "Running ota_from_target_files"
   build/tools/releasetools/ota_from_target_files --block -k "$KEY_DIR/releasekey" "${EXTRA_OTA[@]}" $OUT/$TARGET_FILES \
       $OUT/$DEVICE-ota_update-$BUILD.zip
 
-
   log "Running img_from_target_files"
   sed -i 's/zipfile\.ZIP_DEFLATED/zipfile\.ZIP_STORED/' build/tools/releasetools/img_from_target_files.py
   build/tools/releasetools/img_from_target_files $OUT/$TARGET_FILES $OUT/$DEVICE-img-$BUILD.zip
-
 
   log "Running generate-factory-images"
   cd $OUT
@@ -988,7 +1047,6 @@ release() {
   source ../../device/common/generate-factory-images-common.sh
   mv $DEVICE-$VERSION-factory.tar $DEVICE-factory-$BUILD_NUMBER.tar
   rm -f $DEVICE-factory-$BUILD_NUMBER.tar.xz
-
 
   log "Running compress of factory image with pxz"
   time pxz -v -T0 -9 -z $DEVICE-factory-$BUILD_NUMBER.tar
@@ -1010,7 +1068,7 @@ gen_keys() {
   mkdir -p "${KEYS_DIR}/${DEVICE}"
   cd "${KEYS_DIR}/${DEVICE}"
   if [ -z "$(ls -A ${KEYS_DIR}/${DEVICE})" ]; then
-    for key in {releasekey,platform,shared,media,verity} ; do
+    for key in {releasekey,platform,shared,media,networkstack,verity} ; do
       # make_key exits with unsuccessful code 1 instead of 0, need ! to negate
       ! "${BUILD_DIR}/development/tools/make_key" "$key" "$CERTIFICATE_SUBJECT"
     done
