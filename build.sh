@@ -137,12 +137,13 @@ get_latest_versions() {
   fi
 
   # fdroid - get latest non alpha tags from gitlab (sorted)
-  FDROID_CLIENT_VERSION=$(curl --fail -s "$FDROID_CLIENT_URL_LATEST" | jq -r 'sort_by(.name) | reverse | [.[] | select(.name | test("^[0-9]+\\.[0-9]+")) | select(.name | contains("alpha") | not) | select(.name | contains("ota") | not)][0] | .name')
+  # TODO: exclude alpha once 1.8 stable is released
+  FDROID_CLIENT_VERSION=$(curl --fail -s "$FDROID_CLIENT_URL_LATEST" | jq -r '[.[] | select(.name | test("^[0-9]+\\.[0-9]+")) | select(.name | contains("ota") | not)][] | .name' | sort --version-sort -r | head -1)
   if [ -z "$FDROID_CLIENT_VERSION" ]; then
     echo "ERROR: Unable to get latest F-Droid version details. Stopping build."
     exit 1
   fi
-  FDROID_PRIV_EXT_VERSION=$(curl --fail -s "$FDROID_PRIV_EXT_URL_LATEST" | jq -r 'sort_by(.name) | reverse | [.[] | select(.name | test("^[0-9]+\\.[0-9]+")) | select(.name | contains("alpha") | not) | select(.name | contains("ota") | not)][0] | .name')
+  FDROID_PRIV_EXT_VERSION=$(curl --fail -s "$FDROID_PRIV_EXT_URL_LATEST" | jq -r '[.[] | select(.name | test("^[0-9]+\\.[0-9]+")) | select(.name | contains("alpha") | not) | select(.name | contains("ota") | not)][] | .name' | sort --version-sort -r | head -1)
   if [ -z "$FDROID_PRIV_EXT_VERSION" ]; then
     echo "ERROR: Unable to get latest F-Droid privilege extension version details. Stopping build."
     exit 1
@@ -194,12 +195,18 @@ check_for_new_versions() {
     LATEST_CHROMIUM="$CHROMIUM_PINNED_VERSION"
   fi
   existing_chromium=$(cat $CHAOSP_DIR/chromium/revision || true)
-  if [ "$existing_chromium" == "$LATEST_CHROMIUM" ]; then
+  chromium_included=$(cat $CHAOSP_DIR/chromium/included || true)
+  if [ "$existing_chromium" == "$LATEST_CHROMIUM" ] && [ "$chromium_included" == "yes" ]; then
     echo "Chromium build ($existing_chromium) is up to date"
   else
     echo "Chromium needs to be updated to ${LATEST_CHROMIUM}"
+    echo "no" > $CHAOSP_DIR/chromium/included
     needs_update=true
-    BUILD_REASON="$BUILD_REASON 'Chromium version $existing_chromium != $LATEST_CHROMIUM'"
+    if [ "$existing_chromium" == "$LATEST_CHROMIUM" ]; then
+      BUILD_REASON="$BUILD_REASON 'Chromium version $existing_chromium built but not installed'"
+    else
+      BUILD_REASON="$BUILD_REASON 'Chromium version $existing_chromium != $LATEST_CHROMIUM'"
+    fi
   fi
 
   # check fdroid
@@ -247,21 +254,21 @@ check_for_new_versions() {
 full_run() {
   log_header ${FUNCNAME}
 
-  revert_previous_run_patches
+  #revert_previous_run_patches
 
-  get_latest_versions
-  check_for_new_versions
+  #get_latest_versions
+  #check_for_new_versions
   #initial_key_setup
   echo "CHAOSP Build STARTED"
-  setup_env
-  check_chromium
-  aosp_repo_init
-  aosp_repo_modifications
-  aosp_repo_sync
-  gen_keys
-  setup_vendor
-  build_fdroid
-  apply_patches
+  #setup_env
+  #check_chromium
+  #aosp_repo_init
+  #aosp_repo_modifications
+  #aosp_repo_sync
+  #gen_keys
+  #setup_vendor
+  #build_fdroid
+  #apply_patches
   # only marlin and sailfish need kernel rebuilt so that verity_key is included
   if [ "${DEVICE}" == "marlin" ] || [ "${DEVICE}" == "sailfish" ]; then
     rebuild_marlin_kernel
@@ -278,28 +285,29 @@ full_run() {
   echo "CHAOSP Build SUCCESS"
 }
 
-# add_chromium() {
-#   log_header ${FUNCNAME}
+add_chromium() {
+  log_header ${FUNCNAME}
 
-#   # replace AOSP webview with latest built chromium webview
-#   aws s3 cp "s3://${AWS_RELEASE_BUCKET}/chromium/SystemWebView.apk" ${BUILD_DIR}/external/chromium-webview/prebuilt/arm64/webview.apk
+  # replace AOSP webview with latest built chromium webview
+  cp "$CHAOSP_DIR/SystemWebView.apk" ${BUILD_DIR}/external/chromium-webview/prebuilt/arm64/webview.apk
 
-#   # add latest built chromium browser to external/chromium
-#   aws s3 cp "s3://${AWS_RELEASE_BUCKET}/chromium/ChromeModernPublic.apk" ${BUILD_DIR}/external/chromium/prebuilt/arm64/
-# }
+  # add latest built chromium browser to external/chromium
+  cp "$CHAOSP_DIR/ChromeModernPublic.apk" ${BUILD_DIR}/external/chromium/prebuilt/arm64/
+}
 
 build_fdroid() {
   log_header ${FUNCNAME}
 
   # build it outside AOSP build tree or hit errors
-  git clone https://gitlab.com/fdroid/fdroidclient ${HOME}/fdroidclient
-  pushd ${HOME}/fdroidclient
-  echo "sdk.dir=${HOME}/sdk" > local.properties
-  echo "sdk.dir=${HOME}/sdk" > app/local.properties
+  git clone https://gitlab.com/fdroid/fdroidclient ${CHAOSP_DIR}/fdroidclient
+  pushd ${CHAOSP_DIR}/fdroidclient
+  echo "sdk.dir=${CHAOSP_DIR}/sdk" > local.properties
+  echo "sdk.dir=${CHAOSP_DIR}/sdk" > app/local.properties
   git checkout $FDROID_CLIENT_VERSION
   retry ./gradlew assembleRelease
   cp -f app/build/outputs/apk/full/release/app-full-release-unsigned.apk ${BUILD_DIR}/packages/apps/F-Droid/F-Droid.apk
   popd
+  rm -rf ${CHAOSP_DIR}/fdroidclient
 }
 
 get_encryption_key() {
@@ -312,7 +320,7 @@ get_encryption_key() {
   error_message=""
   while [ 1 ]; do
     # aws sns publish --region ${REGION} --topic-arn "$AWS_SNS_ARN" \
-    #   --message="$(printf "%s Need to login to the EC2 instance and provide the encryption passphrase (${wait_time} timeout before shutdown). You may need to open up SSH in the default security group, see the FAQ for details. %s\n\nssh ubuntu@%s 'printf \"Enter encryption passphrase: \" && read k && echo \"\$k\" > %s'" "$error_message" "$additional_message" "${INSTANCE_IP}" "${ENCRYPTION_PIPE}")"
+    #   --message="$(printf "%s Need to login to the EC2 instance and provide the encryption passphrase (${wait_time} timeout before shutdown). You may need to open up SSH in the default security group, see the FAQ for details. %s\n\nssh ubuntu@%s 'printf \"Enter encryption passphrase: \" && read -s k && echo \"\$k\" > %s'" "$error_message" "$additional_message" "${INSTANCE_IP}" "${ENCRYPTION_PIPE}")"
     # error_message=""
 
     log "Waiting for encryption passphrase (with $wait_time timeout) to be provided over named pipe $ENCRYPTION_PIPE"
@@ -483,10 +491,11 @@ android_default_version_code = "$DEFAULT_VERSION"
 EOF
   gn gen out/Default
 
-  log "Building chromium system_webview_apk target"
-  autoninja -C out/Default/ system_webview_apk
   log "Building chromium chrome_modern_public_apk target"
   autoninja -C out/Default/ chrome_modern_public_apk
+
+  log "Building chromium system_webview_apk target"
+  autoninja -C out/Default/ system_webview_apk
 
   # copy to build tree
   mkdir -p ${BUILD_DIR}/external/chromium/prebuilt/arm64
@@ -494,7 +503,7 @@ EOF
   cp "out/Default/apks/ChromeModernPublic.apk" ${BUILD_DIR}/external/chromium/prebuilt/arm64/
   # copy this apk outside of chromium folder, in case of
   cp "out/Default/apks/SystemWebView.apk" $CHAOSP_DIR/
-cp "out/Default/apks/ChromeModernPublic.apk" $CHAOSP_DIR/
+  cp "out/Default/apks/ChromeModernPublic.apk" $CHAOSP_DIR/
 
   # upload to s3 for future builds
   echo "${CHROMIUM_REVISION}" > $CHAOSP_DIR/chromium/revision
@@ -511,7 +520,6 @@ aosp_repo_modifications() {
   log_header ${FUNCNAME}
   cd "${BUILD_DIR}"
 
-  # TODO: remove revision=dev from platform_external_chromium in future release, didn't want to break build for anyone on beta 10.x build
   # make modifications to default AOSP
   if ! grep -q "RattlesnakeOS" .repo/manifest.xml; then
     # really ugly awk script to add additional repos to manifest
@@ -538,8 +546,8 @@ aosp_repo_modifications() {
       print "  <project path=\"packages/apps/Updater\" name=\"platform_packages_apps_Updater\" remote=\"github\" />";
       print "  <project path=\"packages/apps/F-Droid\" name=\"platform_external_fdroid\" remote=\"github\" />";
       print "  <project path=\"packages/apps/F-DroidPrivilegedExtension\" name=\"privileged-extension\" remote=\"fdroid\" revision=\"refs/tags/" FDROID_PRIV_EXT_VERSION "\" />";
-      print "  <project path=\"vendor/android-prepare-vendor\" name=\"android-prepare-vendor\" remote=\"prepare-vendor\" />"}' .repo/manifest.xml
- 
+      print "  <project path=\"vendor/android-prepare-vendor\" name=\"android-prepare-vendor\" remote=\"github\" />"}' .repo/manifest.xml
+
     # remove things from manifest
     sed -i '/packages\/apps\/Browser2/d' .repo/manifest.xml
     sed -i '/packages\/apps\/Calendar/d' .repo/manifest.xml
@@ -563,7 +571,7 @@ setup_vendor() {
   log_header ${FUNCNAME}
 
   # get vendor files (with timeout)
-  timeout 30m "${BUILD_DIR}/vendor/android-prepare-vendor/execute-all.sh" --full --debugfs --keep --yes --device "${DEVICE}" --buildID "${AOSP_BUILD}" --output "${BUILD_DIR}/vendor/android-prepare-vendor"
+  timeout 30m "${BUILD_DIR}/vendor/android-prepare-vendor/execute-all.sh" --debugfs --keep --yes --device "${DEVICE}" --buildID "${AOSP_BUILD}" --output "${BUILD_DIR}/vendor/android-prepare-vendor"
   echo "${AOSP_BUILD}" > $CHAOSP_DIR/${DEVICE}-vendor
 
   # copy vendor files to build tree
@@ -583,8 +591,8 @@ apply_patches() {
 
   revert_previous_run_patches
   patch_mkbootfs
-  patch_add_opengapps
-  patch_custom
+  #patch_add_opengapps
+  #patch_custom
   patch_aosp_removals
   patch_add_apps
   #patch_tethering
@@ -598,6 +606,7 @@ apply_patches() {
   patch_launcher
   #patch_vendor_security_level
   patch_broken_alarmclock
+  patch_broken_messaging
   patch_disable_apex
 }
 
@@ -620,6 +629,16 @@ patch_broken_alarmclock() {
   if ! grep -q "android.permission.FOREGROUND_SERVICE" ${BUILD_DIR}/packages/apps/DeskClock/AndroidManifest.xml; then
     sed -i '/<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" \/>/a <uses-permission android:name="android.permission.FOREGROUND_SERVICE" \/>' ${BUILD_DIR}/packages/apps/DeskClock/AndroidManifest.xml
     sed -i 's@<uses-sdk android:minSdkVersion="19" android:targetSdkVersion="28" />@<uses-sdk android:minSdkVersion="19" android:targetSdkVersion="25" />@' ${BUILD_DIR}/packages/apps/DeskClock/AndroidManifest.xml
+  fi
+}
+
+# TODO: remove once this once fix from upstream makes it into release branch
+# https://android.googlesource.com/platform/packages/apps/Messaging/+/8e71d1b707123e1b48b5529b1661d53762922400%5E%21/
+patch_broken_messaging() {
+  log_header ${FUNCNAME}
+
+  if ! grep -q "android:targetSdkVersion=\"24\"" ${BUILD_DIR}/packages/apps/Messaging/AndroidManifest.xml; then
+    sed -i 's@<uses-sdk android:minSdkVersion="19" android:targetSdkVersion="28" />@<uses-sdk android:minSdkVersion="19" android:targetSdkVersion="24" />@' ${BUILD_DIR}/packages/apps/Messaging/AndroidManifest.xml
   fi
 }
 
@@ -779,14 +798,9 @@ patch_base_config() {
 
   # enable swipe up gesture functionality as option
   sed -i 's@<bool name="config_swipe_up_gesture_setting_available">false</bool>@<bool name="config_swipe_up_gesture_setting_available">true</bool>@' ${BUILD_DIR}/frameworks/base/core/res/res/values/config.xml
-}
 
-patch_vendor_security_level() {
-  log_header ${FUNCNAME}
-
-  f=$(echo "${AOSP_BUILD}" | awk -F"." '{print $2}')
-  VENDOR_SECURITY_PATCH_LEVEL="20${f::2}-${f:2:2}-${f:4:2}"
-  sed -i 's@2018-09-05@'${VENDOR_SECURITY_PATCH_LEVEL}'@' ${BUILD_DIR}/device/google/crosshatch/device-common.mk || true
+  # enable doze and app standby
+  sed -i 's@<bool name="config_enableAutoPowerModes">false</bool>@<bool name="config_enableAutoPowerModes">true</bool>@' ${BUILD_DIR}/frameworks/base/core/res/res/values/config.xml
 }
 
 patch_settings_app() {
@@ -813,32 +827,6 @@ patch_device_config() {
 
   sed -i 's@PRODUCT_MODEL := AOSP on bonito@PRODUCT_MODEL := Pixel 3a XL@' ${BUILD_DIR}/device/google/bonito/aosp_bonito.mk || true
   sed -i 's@PRODUCT_MODEL := AOSP on sargo@PRODUCT_MODEL := Pixel 3a@' ${BUILD_DIR}/device/google/bonito/aosp_sargo.mk || true
-}
-
-patch_chromium_webview() {
-  log_header ${FUNCNAME}
-
-  cat <<EOF > ${BUILD_DIR}/frameworks/base/core/res/res/xml/config_webview_packages.xml
-<?xml version="1.0" encoding="utf-8"?>
-<webviewproviders>
-    <webviewprovider description="Chromium" packageName="org.chromium.chrome" availableByDefault="true">
-    </webviewprovider>
-</webviewproviders>
-EOF
-}
-
-patch_fdroid() {
-  log_header ${FUNCNAME}
-
-  echo "sdk.dir=${CHAOSP_DIR}/sdk" > ${BUILD_DIR}/packages/apps/F-Droid/local.properties
-  echo "sdk.dir=${CHAOSP_DIR}/sdk" > ${BUILD_DIR}/packages/apps/F-Droid/app/local.properties
-  sed -i 's/gradle assembleRelease/..\/gradlew assembleRelease/' ${BUILD_DIR}/packages/apps/F-Droid/Android.mk
-  sed -i 's@fdroid_apk   := build/outputs/apk/$(fdroid_dir)-release-unsigned.apk@fdroid_apk   := build/outputs/apk/full/release/app-full-release-unsigned.apk@'  ${BUILD_DIR}/packages/apps/F-Droid/Android.mk
-
-  # sometimes gradle dependencies fail to download, so gradle build with retry before the AOSP build as workaround
-  pushd ${BUILD_DIR}/packages/apps/F-Droid
-  retry ./gradlew assembleRelease
-  popd
 }
 
 get_package_mk_file() {
@@ -955,8 +943,6 @@ build_aosp() {
   export DISPLAY_BUILD_NUMBER=true
   chrt -b -p 0 $$
 
-  prebuilts/misc/linux-x86/ccache/ccache -M 100G
-
   choosecombo $BUILD_TARGET
   log "Running target-files-package"
   retry make -j $(nproc) target-files-package
@@ -1057,8 +1043,14 @@ checkpoint_versions() {
   log_header ${FUNCNAME}
 
   # checkpoint f-droid
-  echo "${FDROID_PRIV_EXT_VERSION}" > $CHAOSP_DIR/revisions/fdroid-priv/revision"
-  echo "${FDROID_CLIENT_VERSION}" > $CHAOSP_DIR/revisions/fdroid/revision"
+  echo "${FDROID_PRIV_EXT_VERSION}" > $CHAOSP_DIR/revisions/fdroid-priv/revision
+  echo "${FDROID_CLIENT_VERSION}" > $CHAOSP_DIR/revisions/fdroid/revision
+
+  # checkpoint aosp
+  echo -ne "${AOSP_BUILD}" > $CHAOSP_DIR/${DEVICE}-vendor || true
+  
+  # checkpoint chromium
+  echo "yes" > $CHAOSP_DIR/chromium/included
 }
 
 
@@ -1165,9 +1157,11 @@ add_magisk(){
 
   # Move the original init binary to the place where Magisk expects it to be
   mkdir -p $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/.backup
-  cp -n $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/{init,.backup/init}
+  #cp -n $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/{system/bin/init,.backup/init}
+  ln -f -s /system/bin/init $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/.backup/init
 
   # Copy the downloaded magiskinit binary to the place of the original init binary
+  rm $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/init
   cp magisk-latest/arm/magiskinit64 $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/init
 
   # Create Magisk config file. We keep dm-verity and encryptiong.
@@ -1178,33 +1172,47 @@ RECOVERYMODE=false
 EOF
 
   # Add our "new" files to the list of files to be packaged/compressed/embedded into the final BOOT image
-  sed -i "/firmware 0 0 644/a .backup 0 0 000 selabel=u:object_r:rootfs:s0 capabilities=0x0\n.backup/init 0 2000 750 selabel=u:object_r:init_exec:s0 capabilities=0x0\n.backup/.magisk 0 2000 750 selabel=u:object_r:rootfs:s0 capabilities=0x0" $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files*/META/boot_filesystem_config.txt
+  if ! grep -Fxq ".backup" $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files*/META/boot_filesystem_config.txt
+  then
+     sed -i "/firmware 0 0 644 selabel=u:object_r:rootfs:s0 capabilities=0x0/a .backup 0 0 000 selabel=u:object_r:rootfs:s0 capabilities=0x0\n.backup/init 0 2000 750 selabel=u:object_r:init_exec:s0 capabilities=0x0\n.backup/.magisk 0 2000 750 selabel=u:object_r:rootfs:s0 capabilities=0x0" $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files*/META/boot_filesystem_config.txt
+  fi
 
   # Retrieve extract-dtb script that will allow us to separate already compiled binary and the concatenated DTB files
-  git clone https://github.com/PabloCastellano/extract-dtb.git
+  #git clone https://github.com/PabloCastellano/extract-dtb.git
 
   # Separate kernel and separate DTB files
-  cd extract-dtb
-  python3 ./extract-dtb.py $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/kernel
+  #cd extract-dtb
+  #python3 ./extract-dtb.py $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/kernel
 
   # Uncompress the kernel
-  lz4 -d dtb/00_kernel dtb/uncompressed_kernel
-  cd -
+  #lz4 -d dtb/00_kernel dtb/uncompressed_kernel
+  #cd -
+	
+  echo "Uncompressing the kernel"
+
+  rm -f $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/uncompressed_kernel
+
+  lz4 -d $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/{kernel,uncompressed_kernel}
 
   # Hexpatch the kernel
+  echo "Hex-patching the kernel"
   chmod +x ./magisk-latest/x86/magiskboot
-  ./magisk-latest/x86/magiskboot hexpatch extract-dtb/dtb/uncompressed_kernel 736B69705F696E697472616D667300 77616E745F696E697472616D667300
+  if grep -Fxq "skip_initramfs" $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/uncompressed_kernel
+  then
+    ./magisk-latest/x86/magiskboot hexpatch $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/uncompressed_kernel 736B69705F696E697472616D667300 77616E745F696E697472616D667300
+  fi
 
   # Recompress kernel
-  lz4 -f -9 extract-dtb/dtb/uncompressed_kernel extract-dtb/dtb/00_kernel
-  rm extract-dtb/dtb/uncompressed_kernel
+  echo "Recompressing the kernel"
+  lz4 -f -9 $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/{uncompressed_kernel,kernel}
+  rm $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/uncompressed_kernel
 
   # Concatenate back kernel and DTB files
-  rm $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/kernel
-  for file in extract-dtb/dtb/*
-  do
-    cat $file >> $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/kernel
-  done
+  #rm $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/kernel
+  #for file in extract-dtb/dtb/*
+  #do
+  #  cat $file >> $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/kernel
+  #done
 
   # Remove target files zip
   rm -f $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER.zip
