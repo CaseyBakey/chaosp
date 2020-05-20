@@ -254,26 +254,26 @@ check_for_new_versions() {
 full_run() {
   log_header ${FUNCNAME}
 
-  #revert_previous_run_patches
+  revert_previous_run_patches
 
-  #get_latest_versions
-  #check_for_new_versions
-  #initial_key_setup
+  get_latest_versions
+  check_for_new_versions
+  initial_key_setup
   echo "CHAOSP Build STARTED"
-  #setup_env
-  #check_chromium
-  #aosp_repo_init
-  #aosp_repo_modifications
-  #aosp_repo_sync
-  #gen_keys
-  #setup_vendor
-  #build_fdroid
-  #apply_patches
+  setup_env
+  check_chromium
+  aosp_repo_init
+  aosp_repo_modifications
+  aosp_repo_sync
+  gen_keys
+  setup_vendor
+  build_fdroid
+  apply_patches
   # only marlin and sailfish need kernel rebuilt so that verity_key is included
   if [ "${DEVICE}" == "marlin" ] || [ "${DEVICE}" == "sailfish" ]; then
     rebuild_marlin_kernel
   fi
-  #add_chromium
+  add_chromium
   build_aosp
 
   if [ "$ADD_MAGISK" = true ]; then
@@ -533,14 +533,14 @@ aosp_repo_modifications() {
       print "  <remote name=\"fdroid\" fetch=\"https://gitlab.com/fdroid/\" />";
       print "  <remote name=\"prepare-vendor\" fetch=\"https://github.com/anestisb/\" revision=\"master\" />";  
       print "  <remote name=\"opengapps\" fetch=\"https://github.com/opengapps/\"  />";
-      print "  <remote name=\"gitlab\" fetch=\"https://gitlab.opengapps.org/opengapps/\"  />";
+      print "  <remote name=\"opengapps-gitlab\" fetch=\"https://gitlab.opengapps.org/opengapps/\"  />";
       
       print "  ";
 
-      print "  <project path=\"vendor/opengapps/build\" name=\"aosp_build\" revision=\"master\" remote=\"opengapps\" />";
-      print "  <project path=\"vendor/opengapps/sources/all\" name=\"all\" clone-depth=\"1\" revision=\"master\" remote=\"gitlab\" />";
-      print "  <project path=\"vendor/opengapps/sources/arm\" name=\"arm\" clone-depth=\"1\" revision=\"master\" remote=\"gitlab\" />";
-      print "  <project path=\"vendor/opengapps/sources/arm64\" name=\"arm64\" clone-depth=\"1\" revision=\"master\" remote=\"gitlab\" />";
+      print "  <project path=\"vendor/opengapps/build\" name=\"aosp_build\" revision=\"master\" remote=\"opengapps-gitlab\" />";
+      print "  <project path=\"vendor/opengapps/sources/all\" name=\"all\" clone-depth=\"1\" revision=\"master\" remote=\"opengapps-gitlab\" />";
+      print "  <project path=\"vendor/opengapps/sources/arm\" name=\"arm\" clone-depth=\"1\" revision=\"master\" remote=\"opengapps-gitlab\" />";
+      print "  <project path=\"vendor/opengapps/sources/arm64\" name=\"arm64\" clone-depth=\"1\" revision=\"master\" remote=\"opengapps-gitlab\" />";
 
       print "  <project path=\"external/chromium\" name=\"platform_external_chromium\" remote=\"github\" />";
       print "  <project path=\"packages/apps/Updater\" name=\"platform_packages_apps_Updater\" remote=\"github\" />";
@@ -591,7 +591,8 @@ apply_patches() {
 
   revert_previous_run_patches
   patch_mkbootfs
-  #patch_add_opengapps
+  patch_recovery
+  patch_add_opengapps
   #patch_custom
   patch_aosp_removals
   patch_add_apps
@@ -599,12 +600,9 @@ apply_patches() {
   patch_base_config
   patch_settings_app
   patch_device_config
-  #patch_chromium_webview
   patch_updater
-  #patch_fdroid
   patch_priv_ext
   patch_launcher
-  #patch_vendor_security_level
   patch_broken_alarmclock
   patch_broken_messaging
   patch_disable_apex
@@ -645,7 +643,12 @@ patch_broken_messaging() {
 # This patch is needed to be able to add "." prefixed files/folders (like ".backup" and ".magisk") from Magisk, into the boot image
 patch_mkbootfs(){
   cd $BUILD_DIR/system/core/
-  patch -p1 --no-backup-if-mismatch < ${CHAOSP_DIR}/mkbootfs.patch
+  patch -p1 --no-backup-if-mismatch < ${CHAOSP_DIR}/patches/mkbootfs.patch
+}
+
+patch_recovery(){
+  cd $BUILD_DIR/bootable/recovery/
+  patch -p1 --no-backup-if-mismatch < ${CHAOSP_DIR}/patches/recovery.patch
 }
 
 # This patch is needed to make opengapps included/called during the build phase
