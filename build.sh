@@ -25,42 +25,62 @@ while getopts ":mgh" opt; do
   esac
 done
 
-shift $(($OPTIND - 1))
-#remaining_args="$@"
-
 if [ $# -lt 1 ]; then
   echo "Need to specify device name as argument"
   exit 1
 fi
 
-# check if supported device
-DEVICE=$1
+if [ $# -eq 2 ]; then
+  DEVICE=$2
+else
+  # check if supported device
+  DEVICE=$1
+fi
+
 case "$DEVICE" in
   marlin|sailfish)
     DEVICE_FAMILY=marlin
+    KERNEL_FAMILY=marlin
+    KERNEL_DEFCONFIG=marlin
     AVB_MODE=verity_only
     ;;
   taimen)
     DEVICE_FAMILY=taimen
+    KERNEL_FAMILY=wahoo
+    KERNEL_DEFCONFIG=wahoo
     AVB_MODE=vbmeta_simple
     ;;
   walleye)
     DEVICE_FAMILY=muskie
+    KERNEL_FAMILY=wahoo
+    KERNEL_DEFCONFIG=wahoo
     AVB_MODE=vbmeta_simple
     ;;
   crosshatch|blueline)
     DEVICE_FAMILY=crosshatch
+    KERNEL_FAMILY=crosshatch
+    KERNEL_DEFCONFIG=b1c1
     AVB_MODE=vbmeta_chained
     EXTRA_OTA=(--retrofit_dynamic_partitions)
     ;;
   sargo|bonito)
     DEVICE_FAMILY=bonito
+    KERNEL_FAMILY=bonito
+    KERNEL_DEFCONFIG=bonito
     AVB_MODE=vbmeta_chained
     EXTRA_OTA=(--retrofit_dynamic_partitions)
+    ;;
+  flame|coral)
+    DEVICE_FAMILY=coral
+    KERNEL_FAMILY=coral
+    KERNEL_DEFCONFIG=coral
+    AVB_MODE=vbmeta_chained_v2
     ;;
   *)
     echo "warning: unknown device $DEVICE, using Pixel 3 defaults"
     DEVICE_FAMILY=$1
+    KERNEL_FAMILY=crosshatch
+    KERNEL_DEFCONFIG=b1c1
     AVB_MODE=vbmeta_chained
     ;;
 esac
@@ -75,9 +95,14 @@ fi
 # allow build and branch to be specified
 AOSP_BUILD=$3
 AOSP_BRANCH=$4
+AOSP_VENDOR_BUILD=
 
 # version of chromium to pin to if requested
 #CHROMIUM_PINNED_VERSION=<% .ChromiumVersion %>
+
+# Whether the kernel needs to be rebuilt
+# It is always rebuilt for marlin/sailfish
+ENABLE_KERNEL_BUILD=false
 
 # whether keys are client side encrypted or not
 ENCRYPTED_KEYS=false
@@ -102,25 +127,26 @@ SECONDS=0
 BUILD_TARGET="release aosp_${DEVICE} ${BUILD_TYPE}"
 RELEASE_URL="https://${AWS_RELEASE_BUCKET}.s3.amazonaws.com"
 RELEASE_CHANNEL="${DEVICE}-${BUILD_CHANNEL}"
-CHROME_CHANNEL="dev"
+CHROME_CHANNEL="stable"
 BUILD_DATE=$(date +%Y.%m.%d.%H)
 BUILD_TIMESTAMP=$(date +%s)
 BUILD_DIR="$CHAOSP_DIR/rattlesnake-os"
 KEYS_DIR="${BUILD_DIR}/keys"
 CERTIFICATE_SUBJECT='/CN=RattlesnakeOS'
 OFFICIAL_FDROID_KEY="43238d512c1e5eb2d6569f4a3afbf5523418b82e0a3ed1552770abb9a9c9ccab"
-MARLIN_KERNEL_SOURCE_DIR="${CHAOSP_DIR}/kernel/google/marlin"
+KERNEL_SOURCE_DIR="${CHAOSP_DIR}/kernel/google/${KERNEL_FAMILY}"
 BUILD_REASON=""
 
 # urls
 ANDROID_SDK_URL="https://dl.google.com/android/repository/sdk-tools-linux-4333796.zip"
 MANIFEST_URL="https://android.googlesource.com/platform/manifest"
-CHROME_URL_LATEST="https://omahaproxy.appspot.com/all.json"
-FDROID_CLIENT_URL_LATEST="https://gitlab.com/api/v4/projects/36189/repository/tags"
-FDROID_PRIV_EXT_URL_LATEST="https://gitlab.com/api/v4/projects/1481578/repository/tags"
 KERNEL_SOURCE_URL="https://android.googlesource.com/kernel/msm"
 AOSP_URL_BUILD="https://developers.google.com/android/images"
-AOSP_URL_BRANCH="https://source.android.com/setup/start/build-numbers"
+AOSP_URL_PLATFORM_BUILD="https://android.googlesource.com/platform/build"
+RATTLESNAKEOS_LATEST_JSON="https://raw.githubusercontent.com/RattlesnakeOS/latest/${ANDROID_VERSION}"
+RATTLESNAKEOS_LATEST_JSON_AOSP="${RATTLESNAKEOS_LATEST_JSON}/aosp.json"
+RATTLESNAKEOS_LATEST_JSON_CHROMIUM="${RATTLESNAKEOS_LATEST_JSON}/chromium.json"
+RATTLESNAKEOS_LATEST_JSON_FDROID="${RATTLESNAKEOS_LATEST_JSON}/fdroid.json"
 
 LATEST_CHROMIUM=
 FDROID_CLIENT_VERSION=
@@ -129,47 +155,48 @@ FDROID_PRIV_EXT_VERSION=
 get_latest_versions() {
   log_header ${FUNCNAME}
 
-  # check for latest stable chromium version
-  LATEST_CHROMIUM=$(curl --fail -s "$CHROME_URL_LATEST" | jq -r '.[] | select(.os == "android") | .versions[] | select(.channel == "'$CHROME_CHANNEL'") | .current_version')
+  # check for latest chromium version
+  LATEST_CHROMIUM=$(curl --fail -s "${RATTLESNAKEOS_LATEST_JSON_CHROMIUM}" | jq -r ".$CHROME_CHANNEL")
   if [ -z "$LATEST_CHROMIUM" ]; then
     echo "ERROR: Unable to get latest Chromium version details. Stopping build."
     exit 1
   fi
+  echo "LATEST_CHROMIUM=${LATEST_CHROMIUM}"
 
-  # fdroid - get latest non alpha tags from gitlab (sorted)
-  # TODO: exclude alpha once 1.8 stable is released
-  FDROID_CLIENT_VERSION=$(curl --fail -s "$FDROID_CLIENT_URL_LATEST" | jq -r '[.[] | select(.name | test("^[0-9]+\\.[0-9]+")) | select(.name | contains("ota") | not)][] | .name' | sort --version-sort -r | head -1)
+  FDROID_CLIENT_VERSION=$(curl --fail -s "${RATTLESNAKEOS_LATEST_JSON_FDROID}" | jq -r ".client")
   if [ -z "$FDROID_CLIENT_VERSION" ]; then
     echo "ERROR: Unable to get latest F-Droid version details. Stopping build."
     exit 1
   fi
-  FDROID_PRIV_EXT_VERSION=$(curl --fail -s "$FDROID_PRIV_EXT_URL_LATEST" | jq -r '[.[] | select(.name | test("^[0-9]+\\.[0-9]+")) | select(.name | contains("alpha") | not) | select(.name | contains("ota") | not)][] | .name' | sort --version-sort -r | head -1)
+  echo "FDROID_CLIENT_VERSION=${FDROID_CLIENT_VERSION}"
+
+  FDROID_PRIV_EXT_VERSION=$(curl --fail -s "${RATTLESNAKEOS_LATEST_JSON_FDROID}" | jq -r ".privilegedextention")
   if [ -z "$FDROID_PRIV_EXT_VERSION" ]; then
     echo "ERROR: Unable to get latest F-Droid privilege extension version details. Stopping build."
     exit 1
   fi
+  echo "FDROID_PRIV_EXT_VERSION=${FDROID_PRIV_EXT_VERSION}"
 
-  # attempt to automatically pick latest build version and branch. note this is likely to break with any page redesign. should also add some validation here.
+  AOSP_VENDOR_BUILD=$(curl --fail -s "${RATTLESNAKEOS_LATEST_JSON_AOSP}" | jq -r ".${DEVICE}.build")
+  if [ -z "AOSP_VENDOR_BUILD" ]; then
+    echo "ERROR: Unable to get latest AOSP build version details. Stopping build."
+    exit 1
+  fi
   if [ -z "$AOSP_BUILD" ]; then
-    AOSP_BUILD=$(curl --fail -s ${AOSP_URL_BUILD} | grep -A1 "${DEVICE}" | egrep '[a-zA-Z]+ [0-9]{4}\)' | grep "${ANDROID_VERSION}" | tail -1 | cut -d"(" -f2 | cut -d"," -f1)
-    if [ -z "$AOSP_BUILD" ]; then
-      echo "ERROR: Unable to get latest AOSP build information. Stopping build. This lookup is pretty fragile and can break on any page redesign of ${AOSP_URL_BUILD}"
-      exit 1
-    fi
+    AOSP_BUILD=${AOSP_VENDOR_BUILD}
   fi
-  if [ -z "$AOSP_BRANCH" ]; then
-    AOSP_BRANCH=$(curl --fail -s ${AOSP_URL_BRANCH} | grep -A1 "${AOSP_BUILD}" | tail -1 | cut -f2 -d">"|cut -f1 -d"<")
-    if [ -z "$AOSP_BRANCH" ]; then
-      echo "ERROR: Unable to get latest AOSP branch information. Stopping build. This can happen if ${AOSP_URL_BRANCH} hasn't been updated yet with newly released factory images."
-      exit 1
-    fi
-  fi
+  echo "AOSP_VENDOR_BUILD=${AOSP_VENDOR_BUILD}"
+  echo "AOSP_BUILD=${AOSP_BUILD}"
 
-  echo "LATEST_CHROMIUM: " $LATEST_CHROMIUM
-  echo "FDROID_CLIENT_VERSION: " $FDROID_CLIENT_VERSION
-  echo "FDROID_PRIV_EXT_VERSION: " $FDROID_PRIV_EXT_VERSION
-  echo "AOSP_BUILD: " $AOSP_BUILD
-  echo "AOSP_BRANCH: " $AOSP_BRANCH
+  if [ -z "$AOSP_BRANCH" ]; then
+    AOSP_BRANCH=$(curl --fail -s "${RATTLESNAKEOS_LATEST_JSON_AOSP}" | jq -r ".${DEVICE}.branch")
+    if [ -z "$AOSP_BRANCH" ]; then
+      echo "ERROR: Unable to get latest AOSP branch details. Stopping build."
+      exit 1
+    fi
+  fi
+  echo "AOSP_BRANCH=${AOSP_BRANCH}"
+
 }
 
 check_for_new_versions() {
@@ -181,12 +208,12 @@ check_for_new_versions() {
 
   # check aosp
   existing_aosp_build=$(cat $CHAOSP_DIR/revisions/${DEVICE}-vendor || true)
-  if [ "$existing_aosp_build" == "$AOSP_BUILD" ]; then
+  if [ "$existing_aosp_build" == "$AOSP_VENDOR_BUILD" ]; then
     echo "AOSP build ($existing_aosp_build) is up to date"
   else
-    echo "AOSP needs to be updated to ${AOSP_BUILD}"
+    echo "AOSP needs to be updated to ${AOSP_VENDOR_BUILD}"
     needs_update=true
-    BUILD_REASON="$BUILD_REASON 'AOSP build $existing_aosp_build != $AOSP_BUILD'"
+    BUILD_REASON="$BUILD_REASON 'AOSP build $existing_aosp_build != $AOSP_VENDOR_BUILD'"
   fi
 
   # check chromium
@@ -270,8 +297,9 @@ full_run() {
   build_fdroid
   apply_patches
   # only marlin and sailfish need kernel rebuilt so that verity_key is included
-  if [ "${DEVICE}" == "marlin" ] || [ "${DEVICE}" == "sailfish" ]; then
-    rebuild_marlin_kernel
+  # Also build the kernel if enabled in the config 
+  if [ "${KERNEL_FAMILY}" == "marlin" ] || [ "${ENABLE_KERNEL_BUILD}" == "true" ]; then
+    rebuild_kernel
   fi
   add_chromium
   build_aosp
@@ -459,6 +487,8 @@ build_chromium() {
   # checkout specific revision
   git checkout "$CHROMIUM_REVISION" -f
 
+  # install dependencies
+  echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
   log "Installing chromium build dependencies"
   sudo ./build/install-build-deps-android.sh
 
@@ -513,48 +543,43 @@ aosp_repo_init() {
   log_header ${FUNCNAME}
   cd "${BUILD_DIR}"
 
-  repo init --manifest-url "$MANIFEST_URL" --manifest-branch "$AOSP_BRANCH" --depth 1 || true
+  retry repo init --manifest-url "$MANIFEST_URL" --manifest-branch "$AOSP_BRANCH" --depth 1 || true
 }
 
 aosp_repo_modifications() {
   log_header ${FUNCNAME}
   cd "${BUILD_DIR}"
 
-  # make modifications to default AOSP
-  if ! grep -q "RattlesnakeOS" .repo/manifest.xml; then
-    # really ugly awk script to add additional repos to manifest
-    awk -i inplace \
-      -v ANDROID_VERSION="$ANDROID_VERSION" \
-      -v FDROID_CLIENT_VERSION="$FDROID_CLIENT_VERSION" \
-      -v FDROID_PRIV_EXT_VERSION="$FDROID_PRIV_EXT_VERSION" \
-      '1;/<repo-hooks in-project=/{
-      print "  ";
-      print "  <remote name=\"github\" fetch=\"https://github.com/RattlesnakeOS/\" revision=\"" ANDROID_VERSION "\" />";
-      print "  <remote name=\"fdroid\" fetch=\"https://gitlab.com/fdroid/\" />";
-      print "  <remote name=\"prepare-vendor\" fetch=\"https://github.com/anestisb/\" revision=\"master\" />";  
-      print "  <remote name=\"opengapps\" fetch=\"https://github.com/opengapps/\"  />";
-      print "  <remote name=\"opengapps-gitlab\" fetch=\"https://gitlab.opengapps.org/opengapps/\"  />";
-      
-      print "  ";
+  mkdir -p ${BUILD_DIR}/.repo/local_manifests
 
-      print "  <project path=\"vendor/opengapps/build\" name=\"aosp_build\" revision=\"master\" remote=\"opengapps-gitlab\" />";
-      print "  <project path=\"vendor/opengapps/sources/all\" name=\"all\" clone-depth=\"1\" revision=\"master\" remote=\"opengapps-gitlab\" />";
-      print "  <project path=\"vendor/opengapps/sources/arm\" name=\"arm\" clone-depth=\"1\" revision=\"master\" remote=\"opengapps-gitlab\" />";
-      print "  <project path=\"vendor/opengapps/sources/arm64\" name=\"arm64\" clone-depth=\"1\" revision=\"master\" remote=\"opengapps-gitlab\" />";
+  cat <<EOF > ${BUILD_DIR}/.repo/local_manifests/rattlesnakeos.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <remote name="github" fetch="https://github.com/RattlesnakeOS/" revision="${ANDROID_VERSION}" />
+  <remote name="fdroid" fetch="https://gitlab.com/fdroid/" />
+  <remote name="prepare-vendor" fetch="https://github.com/AOSPAlliance/" revision="android10" />  
+  <remote name="opengapps" fetch="https://github.com/opengapps/" />
+  <remote name="opengapps-gitlab" fetch="https://gitlab.opengapps.org/opengapps/" />
 
-      print "  <project path=\"external/chromium\" name=\"platform_external_chromium\" remote=\"github\" />";
-      print "  <project path=\"packages/apps/Updater\" name=\"platform_packages_apps_Updater\" remote=\"github\" />";
-      print "  <project path=\"packages/apps/F-Droid\" name=\"platform_external_fdroid\" remote=\"github\" />";
-      print "  <project path=\"packages/apps/F-DroidPrivilegedExtension\" name=\"privileged-extension\" remote=\"fdroid\" revision=\"refs/tags/" FDROID_PRIV_EXT_VERSION "\" />";
-      print "  <project path=\"vendor/android-prepare-vendor\" name=\"android-prepare-vendor\" remote=\"github\" />"}' .repo/manifest.xml
 
-    # remove things from manifest
-    sed -i '/packages\/apps\/Browser2/d' .repo/manifest.xml
-    sed -i '/packages\/apps\/Calendar/d' .repo/manifest.xml
-    sed -i '/packages\/apps\/QuickSearchBox/d' .repo/manifest.xml
-  else
-    log "Skipping modification of .repo/manifest.xml as they have already been made"
-  fi
+  <project path="vendor/opengapps/build" name="aosp_build" revision="master" remote="opengapps" />
+  <project path="vendor/opengapps/sources/all" name="all" clone-depth="1" revision="master" remote="opengapps-gitlab" />
+  <project path="vendor/opengapps/sources/arm" name="arm" clone-depth="1" revision="master" remote="opengapps-gitlab" />
+  <project path="vendor/opengapps/sources/arm64" name="arm64" clone-depth="1" revision="master" remote="opengapps-gitlab" />
+
+  <project path="external/chromium" name="platform_external_chromium" remote="github" />
+  <project path="packages/apps/Updater" name="platform_packages_apps_Updater" remote="github" />
+  <project path="packages/apps/F-Droid" name="platform_external_fdroid" remote="github" />
+  <project path="packages/apps/F-DroidPrivilegedExtension" name="privileged-extension" remote="fdroid" revision="refs/tags/${FDROID_PRIV_EXT_VERSION}" />
+  <project path="vendor/android-prepare-vendor" name="android-prepare-vendor" remote="prepare-vendor" />
+
+  <remove-project name="platform/packages/apps/Browser2" />
+  <remove-project name="platform/packages/apps/Calendar" />
+  <remove-project name="platform/packages/apps/QuickSearchBox" />
+
+</manifest>
+EOF
+
 }
 
 aosp_repo_sync() {
@@ -571,18 +596,18 @@ setup_vendor() {
   log_header ${FUNCNAME}
 
   # get vendor files (with timeout)
-  timeout 30m "${BUILD_DIR}/vendor/android-prepare-vendor/execute-all.sh" --debugfs --keep --yes --device "${DEVICE}" --buildID "${AOSP_BUILD}" --output "${BUILD_DIR}/vendor/android-prepare-vendor"
-  echo "${AOSP_BUILD}" > $CHAOSP_DIR/${DEVICE}-vendor
+  timeout 30m "${BUILD_DIR}/vendor/android-prepare-vendor/execute-all.sh" --full --debugfs --keep --yes --device "${DEVICE}" --buildID "${AOSP_VENDOR_BUILD}" -i "${BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/${AOSP_VENDOR_DIR}/sargo-qq3a.200805.001-factory-a1d05d06.zip" -O "${BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/${AOSP_VENDOR_DIR}/sargo-ota-qq3a.200805.001-de147438.zip" --output "${BUILD_DIR}/vendor/android-prepare-vendor"
+  echo "${AOSP_BUILD}" > "$CHAOSP_DIR/revisions/${DEVICE}-vendor"
 
   # copy vendor files to build tree
   mkdir --parents "${BUILD_DIR}/vendor/google_devices" || true
   rm -rf "${BUILD_DIR}/vendor/google_devices/$DEVICE" || true
-  mv "${BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/$(tr '[:upper:]' '[:lower:]' <<< "${AOSP_BUILD}")/vendor/google_devices/${DEVICE}" "${BUILD_DIR}/vendor/google_devices"
+  mv "${BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/$(tr '[:upper:]' '[:lower:]' <<< "${AOSP_VENDOR_BUILD}")/vendor/google_devices/${DEVICE}" "${BUILD_DIR}/vendor/google_devices"
 
   # smaller devices need big brother vendor files
   if [ "$DEVICE" != "$DEVICE_FAMILY" ]; then
     rm -rf "${BUILD_DIR}/vendor/google_devices/$DEVICE_FAMILY" || true
-    mv "${BUILD_DIR}/vendor/android-prepare-vendor/$DEVICE/$(tr '[:upper:]' '[:lower:]' <<< "${AOSP_BUILD}")/vendor/google_devices/$DEVICE_FAMILY" "${BUILD_DIR}/vendor/google_devices"
+    mv "${BUILD_DIR}/vendor/android-prepare-vendor/$DEVICE/$(tr '[:upper:]' '[:lower:]' <<< "${AOSP_VENDOR_BUILD}")/vendor/google_devices/$DEVICE_FAMILY" "${BUILD_DIR}/vendor/google_devices"
   fi
 }
 
@@ -830,6 +855,9 @@ patch_device_config() {
 
   sed -i 's@PRODUCT_MODEL := AOSP on bonito@PRODUCT_MODEL := Pixel 3a XL@' ${BUILD_DIR}/device/google/bonito/aosp_bonito.mk || true
   sed -i 's@PRODUCT_MODEL := AOSP on sargo@PRODUCT_MODEL := Pixel 3a@' ${BUILD_DIR}/device/google/bonito/aosp_sargo.mk || true
+
+  sed -i 's@PRODUCT_MODEL := AOSP on coral@PRODUCT_MODEL := Pixel 4 XL@' ${BUILD_DIR}/device/google/coral/aosp_coral.mk || true
+  sed -i 's@PRODUCT_MODEL := AOSP on flame@PRODUCT_MODEL := Pixel 4@' ${BUILD_DIR}/device/google/coral/aosp_flame.mk || true
 }
 
 get_package_mk_file() {
@@ -901,17 +929,26 @@ patch_launcher() {
   sed -i.original "s/boolean createEmptyRowOnFirstScreen;/boolean createEmptyRowOnFirstScreen = false;/" "${BUILD_DIR}/packages/apps/Launcher3/src/com/android/launcher3/provider/ImportDataTask.java"
 }
 
-rebuild_marlin_kernel() {
+rebuild_kernel() {
   log_header ${FUNCNAME}
 
   # checkout kernel source on proper commit
-  mkdir -p "${MARLIN_KERNEL_SOURCE_DIR}"
-  retry git clone "${KERNEL_SOURCE_URL}" "${MARLIN_KERNEL_SOURCE_DIR}"
+  mkdir -p "${KERNEL_SOURCE_DIR}"
+  retry git clone "${KERNEL_SOURCE_URL}" "${KERNEL_SOURCE_DIR}"
+  
+  if [ "${KERNEL_FAMILY}" == "marlin" ] || [ "${KERNEL_FAMILY}" == "wahoo" ]; then
+    kernel_image="${BUILD_DIR}/device/google/${KERNEL_FAMILY}-kernel/Image.lz4-dtb"
+  else
+    kernel_image="${BUILD_DIR}/device/google/${KERNEL_FAMILY}-kernel/Image.lz4"
+  fi
+
   # TODO: make this a bit more robust
-  kernel_commit_id=$(lz4cat "${BUILD_DIR}/device/google/marlin-kernel/Image.lz4-dtb" | grep -a 'Linux version' | cut -d ' ' -f3 | cut -d'-' -f2 | sed 's/^g//g')
-  cd "${MARLIN_KERNEL_SOURCE_DIR}"
+  kernel_commit_id=$(lz4cat "${kernel_image}" | strings | grep -a 'Linux version [0-9]' | cut -d ' ' -f3 | cut -d'-' -f2 | sed 's/^g//g')
+  cd "${KERNEL_SOURCE_DIR}"
   log "Checking out kernel commit ${kernel_commit_id}"
   git checkout ${kernel_commit_id}
+
+  # TODO: kernel patch hooks should be added here 
 
   # run in another shell to avoid it mucking with environment variables for normal AOSP build
   (
@@ -921,11 +958,45 @@ rebuild_marlin_kernel() {
       export PATH="${BUILD_DIR}/prebuilts/misc/linux-x86/lz4:${PATH}";
       export PATH="${BUILD_DIR}/prebuilts/misc/linux-x86/dtc:${PATH}";
       export PATH="${BUILD_DIR}/prebuilts/misc/linux-x86/libufdt:${PATH}";
-      ln --verbose --symbolic ${KEYS_DIR}/${DEVICE}/verity_user.der.x509 ${MARLIN_KERNEL_SOURCE_DIR}/verity_user.der.x509;
-      cd ${MARLIN_KERNEL_SOURCE_DIR};
-      make O=out ARCH=arm64 marlin_defconfig;
-      make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- CROSS_COMPILE_ARM32=arm-linux-androideabi-
-      cp -f out/arch/arm64/boot/Image.lz4-dtb ${BUILD_DIR}/device/google/marlin-kernel/;
+      cd ${KERNEL_SOURCE_DIR};
+
+      if [ "${KERNEL_FAMILY}" == "marlin" ]; then
+        ln --verbose --symbolic ${KEYS_DIR}/${DEVICE}/verity_user.der.x509 ${KERNEL_SOURCE_DIR}/verity_user.der.x509;
+        make O=out ARCH=arm64 ${KERNEL_DEFCONFIG}_defconfig;
+        make -j$(nproc --all) \
+          O=out \
+          ARCH=arm64 \
+          CROSS_COMPILE=aarch64-linux-android- \
+          CROSS_COMPILE_ARM32=arm-linux-androideabi-
+        
+        cp -f out/arch/arm64/boot/Image.lz4-dtb ${BUILD_DIR}/device/google/${KERNEL_FAMILY}-kernel/;
+      fi
+
+      # TODO: haven't tested kernel build for coral
+      if [ "${KERNEL_FAMILY}" == "wahoo" ] || [ "${KERNEL_FAMILY}" == "crosshatch" ] || [ "${KERNEL_FAMILY}" == "bonito" ] || [ "${KERNEL_FAMILY}" == "coral" ]; then
+        export PATH="${BUILD_DIR}/prebuilts/clang/host/linux-x86/clang-r353983c/bin:${PATH}";
+        export LD_LIBRARY_PATH="${BUILD_DIR}/prebuilts/clang/host/linux-x86/clang-r353983c/lib64:${LD_LIBRARY_PATH}";
+        make O=out ARCH=arm64 ${KERNEL_DEFCONFIG}_defconfig;
+        make -j$(nproc --all) \
+          O=out \
+          ARCH=arm64 \
+          CC=clang \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          CROSS_COMPILE=aarch64-linux-android- \
+          CROSS_COMPILE_ARM32=arm-linux-androideabi-
+        
+        cp -f out/arch/arm64/boot/{dtbo.img,Image.lz4-dtb} ${BUILD_DIR}/device/google/${KERNEL_FAMILY}-kernel/;
+
+        if [ "${KERNEL_FAMILY}" == "crosshatch" ]; then
+          cp -f out/arch/arm64/boot/dts/qcom/{sdm845-v2.dtb,sdm845-v2.1.dtb} ${BUILD_DIR}/device/google/${KERNEL_FAMILY}-kernel/;
+        fi
+
+        if [ "${KERNEL_FAMILY}" == "bonito" ]; then
+          cp -f out/arch/arm64/boot/dts/qcom/sdm670.dtb ${BUILD_DIR}/device/google/${KERNEL_FAMILY}-kernel/;
+        fi
+      
+      fi
+      
       rm -rf ${BUILD_DIR}/out/build_*;
   )
 }
@@ -934,6 +1005,12 @@ build_aosp() {
   log_header ${FUNCNAME}
 
   cd "$BUILD_DIR"
+
+  if [ "${AOSP_BUILD}" != "${AOSP_VENDOR_BUILD}" ]; then
+    log "WARNING: Requested AOSP build does not match upstream vendor files. These images may not be functional."
+    log "Patching build_id to match ${AOSP_BUILD}"
+    echo "${AOSP_BUILD}" > vendor/google_devices/${DEVICE}/build_id.txt
+  fi
 
   ############################
   # from original setup.sh script
@@ -945,6 +1022,8 @@ build_aosp() {
   log "BUILD_NUMBER=$BUILD_NUMBER"
   export DISPLAY_BUILD_NUMBER=true
   chrt -b -p 0 $$
+
+  ccache -M 100G
 
   choosecombo $BUILD_TARGET
   log "Running target-files-package"
@@ -1011,6 +1090,14 @@ release() {
                     --avb_system_key "$KEY_DIR/avb.pem"
                     --avb_system_algorithm SHA256_RSA2048)
       ;;
+    vbmeta_chained_v2)
+      AVB_SWITCHES=(--avb_vbmeta_key "$KEY_DIR/avb.pem"
+                    --avb_vbmeta_algorithm SHA256_RSA2048
+                    --avb_system_key "$KEY_DIR/avb.pem"
+                    --avb_system_algorithm SHA256_RSA2048
+                    --avb_vbmeta_system_key "$KEY_DIR/avb.pem"
+                    --avb_vbmeta_system_algorithm SHA256_RSA2048)
+      ;;
   esac
 
   export PATH=$BUILD_DIR/prebuilts/build-tools/linux-x86/bin:$PATH
@@ -1050,7 +1137,7 @@ checkpoint_versions() {
   echo "${FDROID_CLIENT_VERSION}" > $CHAOSP_DIR/revisions/fdroid/revision
 
   # checkpoint aosp
-  echo -ne "${AOSP_BUILD}" > $CHAOSP_DIR/${DEVICE}-vendor || true
+  echo -ne "${AOSP_VENDOR_BUILD}" > $CHAOSP_DIR/revisions/${DEVICE}-vendor || true
   
   # checkpoint chromium
   echo "yes" > $CHAOSP_DIR/chromium/included
