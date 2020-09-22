@@ -76,6 +76,12 @@ case "$DEVICE" in
     KERNEL_DEFCONFIG=coral
     AVB_MODE=vbmeta_chained_v2
     ;;
+  sunfish)
+    DEVICE_FAMILY=sunfish
+    KERNEL_FAMILY=sunfish
+    KERNEL_DEFCONFIG=sunfish
+    AVB_MODE=vbmeta_chained_v2
+    ;;
   *)
     echo "warning: unknown device $DEVICE, using Pixel 3 defaults"
     DEVICE_FAMILY=$1
@@ -858,6 +864,8 @@ patch_device_config() {
 
   sed -i 's@PRODUCT_MODEL := AOSP on coral@PRODUCT_MODEL := Pixel 4 XL@' ${BUILD_DIR}/device/google/coral/aosp_coral.mk || true
   sed -i 's@PRODUCT_MODEL := AOSP on flame@PRODUCT_MODEL := Pixel 4@' ${BUILD_DIR}/device/google/coral/aosp_flame.mk || true
+
+  sed -i 's@PRODUCT_MODEL := AOSP on sunfish@PRODUCT_MODEL := Pixel 4A@' ${BUILD_DIR}/device/google/sunfish/aosp_sunfish.mk || true
 }
 
 get_package_mk_file() {
@@ -877,9 +885,6 @@ patch_add_apps() {
   sed -i "\$aPRODUCT_PACKAGES += F-DroidPrivilegedExtension" ${mk_file}
   sed -i "\$aPRODUCT_PACKAGES += F-Droid" ${mk_file}
   sed -i "\$aPRODUCT_PACKAGES += chromium" ${mk_file}
-  if [ "${ENABLE_ATTESTATION}" == "true" ]; then
-    sed -i "\$aPRODUCT_PACKAGES += Auditor" ${mk_file}
-  fi
 
   # # add any modules defined in custom manifest projects
   # <% if .CustomManifestProjects %><% range $i, $r := .CustomManifestProjects %><% range $j, $q := .Modules %>
