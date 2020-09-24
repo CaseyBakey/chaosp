@@ -76,6 +76,12 @@ case "$DEVICE" in
     KERNEL_DEFCONFIG=coral
     AVB_MODE=vbmeta_chained_v2
     ;;
+  sunfish)
+    DEVICE_FAMILY=sunfish
+    KERNEL_FAMILY=sunfish
+    KERNEL_DEFCONFIG=sunfish
+    AVB_MODE=vbmeta_chained_v2
+    ;;
   *)
     echo "warning: unknown device $DEVICE, using Pixel 3 defaults"
     DEVICE_FAMILY=$1
@@ -334,6 +340,7 @@ build_fdroid() {
   git checkout $FDROID_CLIENT_VERSION
   retry ./gradlew assembleRelease
   cp -f app/build/outputs/apk/full/release/app-full-release-unsigned.apk ${BUILD_DIR}/packages/apps/F-Droid/F-Droid.apk
+  echo -ne "$FDROID_CLIENT_VERSION" > ${CHAOSP_DIR}/revisions/fdroid/revision
   popd
   rm -rf ${CHAOSP_DIR}/fdroidclient
 }
@@ -590,6 +597,16 @@ aosp_repo_sync() {
   for i in {1..10}; do
     repo sync -c --no-tags --no-clone-bundle --jobs 32 && break
   done
+
+  cd vendor/opengapps/sources/
+  cd all
+  git lfs pull
+  cd -
+  cd arm
+  git lfs pull
+  cd -
+  cd arm64
+  git lfs pull
 }
 
 setup_vendor() {
@@ -668,12 +685,12 @@ patch_broken_messaging() {
 # This patch is needed to be able to add "." prefixed files/folders (like ".backup" and ".magisk") from Magisk, into the boot image
 patch_mkbootfs(){
   cd $BUILD_DIR/system/core/
-  patch -p1 --no-backup-if-mismatch < ${CHAOSP_DIR}/patches/mkbootfs.patch
+  patch -p1 --no-backup-if-mismatch < ${CHAOSP_DIR}/patches/0004_allow_dot_files_in_ramdisk.patch
 }
 
 patch_recovery(){
   cd $BUILD_DIR/bootable/recovery/
-  patch -p1 --no-backup-if-mismatch < ${CHAOSP_DIR}/patches/recovery.patch
+  patch -p1 --no-backup-if-mismatch < ${CHAOSP_DIR}/patches/0002_recovery_add_mark_successful_option.patch
 }
 
 # This patch is needed to make opengapps included/called during the build phase
@@ -716,7 +733,7 @@ revert_previous_run_patches() {
 
     #repo sync -d
     repo forall -vc "git reset --hard" || true
-
+    rm -f $BUILD_DIR/bootable/recovery/install/{include/install/mark_slot_successful.h,mark_slot_successful.cpp}
   fi
 
 }
@@ -858,6 +875,8 @@ patch_device_config() {
 
   sed -i 's@PRODUCT_MODEL := AOSP on coral@PRODUCT_MODEL := Pixel 4 XL@' ${BUILD_DIR}/device/google/coral/aosp_coral.mk || true
   sed -i 's@PRODUCT_MODEL := AOSP on flame@PRODUCT_MODEL := Pixel 4@' ${BUILD_DIR}/device/google/coral/aosp_flame.mk || true
+
+  sed -i 's@PRODUCT_MODEL := AOSP on sunfish@PRODUCT_MODEL := Pixel 4A@' ${BUILD_DIR}/device/google/sunfish/aosp_sunfish.mk || true
 }
 
 get_package_mk_file() {
@@ -877,9 +896,6 @@ patch_add_apps() {
   sed -i "\$aPRODUCT_PACKAGES += F-DroidPrivilegedExtension" ${mk_file}
   sed -i "\$aPRODUCT_PACKAGES += F-Droid" ${mk_file}
   sed -i "\$aPRODUCT_PACKAGES += chromium" ${mk_file}
-  if [ "${ENABLE_ATTESTATION}" == "true" ]; then
-    sed -i "\$aPRODUCT_PACKAGES += Auditor" ${mk_file}
-  fi
 
   # # add any modules defined in custom manifest projects
   # <% if .CustomManifestProjects %><% range $i, $r := .CustomManifestProjects %><% range $j, $q := .Modules %>
@@ -1133,8 +1149,8 @@ checkpoint_versions() {
   log_header ${FUNCNAME}
 
   # checkpoint f-droid
-  echo "${FDROID_PRIV_EXT_VERSION}" > $CHAOSP_DIR/revisions/fdroid-priv/revision
-  echo "${FDROID_CLIENT_VERSION}" > $CHAOSP_DIR/revisions/fdroid/revision
+  echo -ne "${FDROID_PRIV_EXT_VERSION}" > $CHAOSP_DIR/revisions/fdroid-priv/revision
+  echo -ne "${FDROID_CLIENT_VERSION}" > $CHAOSP_DIR/revisions/fdroid/revision
 
   # checkpoint aosp
   echo -ne "${AOSP_VENDOR_BUILD}" > $CHAOSP_DIR/revisions/${DEVICE}-vendor || true

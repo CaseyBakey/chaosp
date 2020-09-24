@@ -52,10 +52,10 @@ index e69de29..2458e3e 100644
 +bool MarkSlotSuccessful(RecoveryUI* ui, const std::function<bool()>& confirm);
 +
 diff --git a/install/mark_slot_successful.cpp b/install/mark_slot_successful.cpp
-index e69de29..c0faf8b 100644
+index e69de29..8f04775 100644
 --- a/install/mark_slot_successful.cpp
 +++ b/install/mark_slot_successful.cpp
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,81 @@
 +/*
 + * Copyright (C) 2019 The Android Open Source Project
 + *
@@ -103,7 +103,7 @@ index e69de29..c0faf8b 100644
 +    return false;
 +  }
 +
-+  ui->Print("\n-- Marking slots successful...\n");
++  ui->Print("\n-- Marking slot as successful...\n");
 +  bool success = false;
 +
 +  sp<IBootControl> module = IBootControl::getService();
@@ -125,29 +125,18 @@ index e69de29..c0faf8b 100644
 +    module->markBootSuccessful([&cr](CommandResult result) { cr = result; });
 +    if (!cr.success) {
 +      LOG(ERROR) << "Error marking booted successfully: " << cr.errMsg;
++      ui->Print("\n-- Failed to mark slot %d as successful\n", current_slot);
++      success = false;
++    }
++    else {
++      LOG(INFO) << "Marked slot as successful.";
++      ui->Print("\n-- Marked slot %d as successful\n", current_slot);
 +      success = true;
 +    }
-+    LOG(INFO) << "Marked slot as booted successfully.";
-+    ui->Print("\n-- Marked slot %d as booted successfully\n", current_slot);
 +  }
-+
-+  // module->markBootSuccessful([&cr](CommandResult result) { cr = result; });
-+  // if (!cr.success) {
-+  //   LOG(ERROR) << "Error marking booted successfully: " << cr.errMsg;
-+  //   success = true;
-+  // }
-+  // LOG(INFO) << "Marked current slot as booted successfully.";
-+
-+  // uint32_t current_slot = module->getCurrentSlot();
-+  // BoolResult is_successful = module->isSlotMarkedSuccessful(current_slot);
-+  // LOG(INFO) << "Booting slot " << current_slot << ": isSlotMarkedSuccessful="
-+  //           << static_cast<int32_t>(is_successful);
-+
-+  //sdfdsfs
 +
 +  return success;
 +}
-\ No newline at end of file
 diff --git a/recovery.cpp b/recovery.cpp
 index 5fc673e..bcfe728 100644
 --- a/recovery.cpp
@@ -178,14 +167,13 @@ index 5fc673e..bcfe728 100644
          save_current_log = true;
          if (ui->IsTextVisible()) {
 diff --git a/recovery_ui/device.cpp b/recovery_ui/device.cpp
-index e7ae1a3..328632b 100644
+index e7ae1a3..7685add 100644
 --- a/recovery_ui/device.cpp
 +++ b/recovery_ui/device.cpp
-@@ -31,7 +31,7 @@ static std::vector<std::pair<std::string, Device::BuiltinAction>> g_menu_actions
-   { "Enter fastboot", Device::ENTER_FASTBOOT },
+@@ -32,6 +32,7 @@ static std::vector<std::pair<std::string, Device::BuiltinAction>> g_menu_actions
    { "Apply update from ADB", Device::APPLY_ADB_SIDELOAD },
    { "Apply update from SD card", Device::APPLY_SDCARD },
--  { "Wipe data/factory reset", Device::WIPE_DATA },
+   { "Wipe data/factory reset", Device::WIPE_DATA },
 +  { "Mark slot as successful", Device::MARK_SLOT_SUCCESSFUL },
    { "Wipe cache partition", Device::WIPE_CACHE },
    { "Mount /system", Device::MOUNT_SYSTEM },

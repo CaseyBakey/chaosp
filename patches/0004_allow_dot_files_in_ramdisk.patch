@@ -1,0 +1,16 @@
+--- a/cpio/mkbootfs.c
++++ b/cpio/mkbootfs.c
+@@ -179,9 +179,13 @@
+     }
+ 
+     while((de = readdir(d)) != 0){
++         if(strcmp(de->d_name, ".backup") == 0 || strcmp(de->d_name, ".magisk") == 0)
++            goto let_magisk;
++
+             /* xxx: feature? maybe some dotfiles are okay */
+         if(de->d_name[0] == '.') continue;
+ 
++let_magisk:
+             /* xxx: hack. use a real exclude list */
+         if(!strcmp(de->d_name, "root")) continue;
+ 

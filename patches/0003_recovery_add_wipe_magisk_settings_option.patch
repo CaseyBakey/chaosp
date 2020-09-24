@@ -1,0 +1,131 @@
+diff --git a/install/include/install/wipe_data.h b/install/include/install/wipe_data.h
+index b34891f..21c80f8 100644
+--- a/install/include/install/wipe_data.h
++++ b/install/include/install/wipe_data.h
+@@ -28,3 +28,6 @@ bool WipeCache(RecoveryUI* ui, const std::function<bool()>& confirm);
+ 
+ // Returns true on success.
+ bool WipeData(Device* device, bool convert_fbe);
++
++//Returns true on success
++bool WipeMagiskSettings(RecoveryUI* ui, const std::function<bool()>& confirm);
+diff --git a/install/wipe_data.cpp b/install/wipe_data.cpp
+index 765a815..0d94770 100644
+--- a/install/wipe_data.cpp
++++ b/install/wipe_data.cpp
+@@ -18,6 +18,9 @@
+ 
+ #include <stdio.h>
+ #include <string.h>
++#include <sys/types.h>
++#include <dirent.h>
++#include <iostream>
+ #include <sys/stat.h>
+ 
+ #include <functional>
+@@ -120,4 +123,59 @@ bool WipeData(Device* device, bool convert_fbe) {
+   }
+   ui->Print("Data wipe %s.\n", success ? "complete" : "failed");
+   return success;
++}
++
++bool WipeMagiskSettings(RecoveryUI* ui, const std::function<bool()>& confirm_func) {
++  ui->Print("\n-- Wiping Magisk settings...\n");
++  bool success = false;
++
++  bool has_adb = volume_for_mount_point("/data/adb/") != nullptr;
++  if (!has_adb) {
++    ui->Print("No /data/adb/ partition found.\n");
++    //return false;
++  }
++
++  load_volume_table();
++
++  // Temporarily mount data so we can rm -rf /data/adb/
++  std::string data_root = "/dev/block/bootdevice/by-name/userdata";
++  mkdir("/mnt/data", 0777);
++  bool mounted = ensure_path_mounted_at(data_root, "/mnt/data") != -1;
++
++  if (!mounted) {
++    LOG(ERROR) << "Failed to mount data image.";
++    ui->Print("Failed to mount /data.\n");
++  }
++
++  if (confirm_func && !confirm_func()) {
++    return false;
++  }
++
++  DIR * d = opendir("/data/adb/");
++  if (!d) {
++    PLOG(ERROR) << "Failed to open /data/adb/";
++    return -1;
++  }
++
++  struct dirent* de;
++  while ((de = readdir(d)) != 0) {
++    std::cout << de->d_name << std::endl;
++  }
++
++  closedir(d);
++
++  d = opendir("/data/adb/");
++  if (!d) {
++    PLOG(ERROR) << "Failed to open /data/adb/";
++    return -1;
++  }
++
++  while ((de = readdir(d)) != 0) {
++    std::cout << de->d_name << std::endl;
++  }
++
++  rmdir("/mnt/data/adb/");
++
++  ui->Print("Magisk settings wipe %s.\n", success ? "complete" : "failed");
++  return success;
+ }
+\ No newline at end of file
+diff --git a/recovery.cpp b/recovery.cpp
+index 5fc673e..ca5c893 100644
+--- a/recovery.cpp
++++ b/recovery.cpp
+@@ -541,6 +541,16 @@ static Device::BuiltinAction prompt_and_wait(Device* device, int status) {
+         break;
+       }
+ 
++      case Device::WIPE_MAGISK_SETTINGS: {
++        save_current_log = true;
++        std::function<bool()> confirm_func = [&device]() {
++          return yes_no(device, "Wipe Magisk settings?", "  THIS CAN NOT BE UNDONE!");
++        };
++        WipeMagiskSettings(ui, ui->IsTextVisible() ? confirm_func : nullptr);
++        if (!ui->IsTextVisible()) return Device::NO_ACTION;
++        break;
++      }
++
+       case Device::APPLY_ADB_SIDELOAD:
+       case Device::APPLY_SDCARD:
+       case Device::ENTER_RESCUE: {
+diff --git a/recovery_ui/device.cpp b/recovery_ui/device.cpp
+index e7ae1a3..1164570 100644
+--- a/recovery_ui/device.cpp
++++ b/recovery_ui/device.cpp
+@@ -34,6 +34,7 @@ static std::vector<std::pair<std::string, Device::BuiltinAction>> g_menu_actions
+   { "Wipe data/factory reset", Device::WIPE_DATA },
+   { "Wipe cache partition", Device::WIPE_CACHE },
+   { "Mount /system", Device::MOUNT_SYSTEM },
++  { "Wipe Magisk settings", Device::WIPE_MAGISK_SETTINGS },
+   { "View recovery logs", Device::VIEW_RECOVERY_LOGS },
+   { "Run graphics test", Device::RUN_GRAPHICS_TEST },
+   { "Run locale test", Device::RUN_LOCALE_TEST },
+diff --git a/recovery_ui/include/recovery_ui/device.h b/recovery_ui/include/recovery_ui/device.h
+index 7c76cdb..36c72f8 100644
+--- a/recovery_ui/include/recovery_ui/device.h
++++ b/recovery_ui/include/recovery_ui/device.h
+@@ -58,6 +58,7 @@ class Device {
+     REBOOT_FASTBOOT = 17,
+     REBOOT_RECOVERY = 18,
+     REBOOT_RESCUE = 19,
++    WIPE_MAGISK_SETTINGS = 21,
+   };
+ 
+   explicit Device(RecoveryUI* ui);
