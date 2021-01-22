@@ -314,6 +314,8 @@ full_run() {
     add_magisk
   fi
 
+  export PATH=${BUILD_DIR}/out/soong/host/linux-x86/bin:$PATH
+
   release "${DEVICE}"
   checkpoint_versions
   echo "CHAOSP Build SUCCESS"
@@ -340,6 +342,7 @@ build_fdroid() {
   git checkout $FDROID_CLIENT_VERSION
   retry ./gradlew assembleRelease
   cp -f app/build/outputs/apk/full/release/app-full-release-unsigned.apk ${BUILD_DIR}/packages/apps/F-Droid/F-Droid.apk
+  echo -ne "$FDROID_CLIENT_VERSION" > ${CHAOSP_DIR}/revisions/fdroid/revision
   popd
   rm -rf ${CHAOSP_DIR}/fdroidclient
 }
@@ -596,6 +599,16 @@ aosp_repo_sync() {
   for i in {1..10}; do
     repo sync -c --no-tags --no-clone-bundle --jobs 32 && break
   done
+
+  cd vendor/opengapps/sources/
+  cd all
+  git lfs pull
+  cd -
+  cd arm
+  git lfs pull
+  cd -
+  cd arm64
+  git lfs pull
 }
 
 setup_vendor() {
@@ -679,7 +692,7 @@ patch_mkbootfs(){
 
 patch_recovery(){
   cd $BUILD_DIR/bootable/recovery/
-  patch -p1 --no-backup-if-mismatch < ${CHAOSP_DIR}/patches/recovery.patch
+  patch -p1 --no-backup-if-mismatch < ${CHAOSP_DIR}/patches/0002_recovery_add_mark_successful_option.patch
 }
 
 # This patch is needed to make opengapps included/called during the build phase
@@ -722,7 +735,7 @@ revert_previous_run_patches() {
 
     #repo sync -d
     repo forall -vc "git reset --hard" || true
-
+    rm -f $BUILD_DIR/bootable/recovery/install/{include/install/mark_slot_successful.h,mark_slot_successful.cpp}
   fi
 
 }
@@ -758,11 +771,11 @@ patch_custom() {
   log "Applying patch 00001-global-internet-permission-toggle.patch"
   patch -p1 --no-backup-if-mismatch < ${patches_dir}/community_patches/00001-global-internet-permission-toggle.patch
 
-  log "Applying patch 00002-global-sensors-permission-toggle.patch"
-  patch -p1 --no-backup-if-mismatch < ${patches_dir}/community_patches/00002-global-sensors-permission-toggle.patch
+#  log "Applying patch 00002-global-sensors-permission-toggle.patch"
+#  patch -p1 --no-backup-if-mismatch < ${patches_dir}/community_patches/00002-global-sensors-permission-toggle.patch
 
-  log "Applying patch 00003-disable-menu-entries-in-recovery.patch"
-  patch -p1 --no-backup-if-mismatch < ${patches_dir}/community_patches/00003-disable-menu-entries-in-recovery.patch
+#  log "Applying patch 00003-disable-menu-entries-in-recovery.patch"
+#  patch -p1 --no-backup-if-mismatch < ${patches_dir}/community_patches/00003-disable-menu-entries-in-recovery.patch
 
   log "Applying patch 00004-increase-default-maximum-password-length.patch"
   patch -p1 --no-backup-if-mismatch < ${patches_dir}/community_patches/00004-increase-default-maximum-password-length.patch
@@ -1138,8 +1151,8 @@ checkpoint_versions() {
   log_header ${FUNCNAME}
 
   # checkpoint f-droid
-  echo "${FDROID_PRIV_EXT_VERSION}" > $CHAOSP_DIR/revisions/fdroid-priv/revision
-  echo "${FDROID_CLIENT_VERSION}" > $CHAOSP_DIR/revisions/fdroid/revision
+  echo -ne "${FDROID_PRIV_EXT_VERSION}" > $CHAOSP_DIR/revisions/fdroid-priv/revision
+  echo -ne "${FDROID_CLIENT_VERSION}" > $CHAOSP_DIR/revisions/fdroid/revision
 
   # checkpoint aosp
   echo -ne "${AOSP_VENDOR_BUILD}" > $CHAOSP_DIR/revisions/${DEVICE}-vendor || true
@@ -1256,7 +1269,7 @@ add_magisk(){
   ln -f -s /system/bin/init $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/.backup/init
 
   # Copy the downloaded magiskinit binary to the place of the original init binary
-  rm $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/init
+  rm -f $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/init
   cp magisk-latest/arm/magiskinit64 $BUILD_DIR/out/target/product/$DEVICE/obj/PACKAGING/target_files_intermediates/aosp_$DEVICE-target_files-$BUILD_NUMBER/BOOT/RAMDISK/init
 
   # Create Magisk config file. We keep dm-verity and encryptiong.
