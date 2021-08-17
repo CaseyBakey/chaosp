@@ -18,11 +18,74 @@ echo "LOCAL_MANIFEST_REVISIONS=${LOCAL_MANIFEST_REVISIONS}"
 
 #### <generated_vars_and_funcs.sh> ####
 
+case "${DEVICE}" in
+  blueline)
+    DEVICE_FRIENDLY="Pixel 3"
+    DEVICE_FAMILY="crosshatch"
+    DEVICE_AVB_MODE="vbmeta_chained"
+    DEVICE_EXTRA_OTA="--retrofit_dynamic_partitions"
+    ;;
+  crosshatch)
+    DEVICE_FRIENDLY="Pixel 3 XL"
+    DEVICE_FAMILY="crosshatch"
+    DEVICE_AVB_MODE="vbmeta_chained"
+    DEVICE_EXTRA_OTA="--retrofit_dynamic_partitions"
+    ;;
+  sargo)
+    DEVICE_FRIENDLY="Pixel 3a"
+    DEVICE_FAMILY="bonito"
+    DEVICE_AVB_MODE="vbmeta_chained"
+    DEVICE_EXTRA_OTA="--retrofit_dynamic_partitions"
+    ;;
+  bonito)
+    DEVICE_FRIENDLY="Pixel 3a XL"
+    DEVICE_FAMILY="bonito"
+    DEVICE_AVB_MODE="vbmeta_chained"
+    DEVICE_EXTRA_OTA="--retrofit_dynamic_partitions"
+    ;;
+  flame)
+    DEVICE_FRIENDLY="Pixel 4"
+    DEVICE_FAMILY="coral"
+    DEVICE_AVB_MODE="vbmeta_chained_v2"
+    DEVICE_EXTRA_OTA=""
+    ;;
+  coral)
+    DEVICE_FRIENDLY="Pixel 4 XL"
+    DEVICE_FAMILY="coral"
+    DEVICE_AVB_MODE="vbmeta_chained_v2"
+    DEVICE_EXTRA_OTA=""
+    ;;
+  sunfish)
+    DEVICE_FRIENDLY="Pixel 4a"
+    DEVICE_FAMILY="sunfish"
+    DEVICE_AVB_MODE="vbmeta_chained_v2"
+    DEVICE_EXTRA_OTA=""
+    ;;
+  bramble)
+    DEVICE_FRIENDLY="Pixel 4a 5G"
+    DEVICE_FAMILY="bramble"
+    DEVICE_AVB_MODE="vbmeta_chained_v2"
+    DEVICE_EXTRA_OTA=""
+    ;;
+  redfin)
+    DEVICE_FRIENDLY="Pixel 5"
+    DEVICE_FAMILY="redfin"
+    DEVICE_AVB_MODE="vbmeta_chained_v2"
+    DEVICE_EXTRA_OTA=""
+    ;;
+  *)
+    echo "Device not supported!"
+    exit 1
+    ;;
+esac
+
 ########################################
 ######## OTHER VARS ####################
 ########################################
 SECONDS=0
-ROOT_DIR="${HOME}"
+ROOT_DIR=$(dirname $0)
+REVISION_DIR="${ROOT_DIR}/revision"
+BINARIES_DIR="${ROOT_DIR}/binaries"
 AOSP_BUILD_DIR="${ROOT_DIR}/aosp"
 CORE_DIR="${ROOT_DIR}/core"
 CUSTOM_DIR="${ROOT_DIR}/custom"
@@ -35,12 +98,19 @@ CORE_VENDOR_MAKEFILE="${CORE_VENDOR_BASEDIR}/vendor/config/main.mk"
 CUSTOM_VENDOR_BASEDIR="${AOSP_BUILD_DIR}/vendor/custom"
 CUSTOM_VENDOR_MAKEFILE="${CUSTOM_VENDOR_BASEDIR}/vendor/config/main.mk"
 
+CORE_CONFIG_REPO="https://github.com/RattlesnakeOS/core-config-repo.git"
+CUSTOM_CONFIG_REPO="https://github.com/CaseyBakey/example-custom-config-repo.git"
+
 full_run() {
   log_header "${FUNCNAME[0]}"
 
-  notify "RattlesnakeOS Build STARTED"
+  echo "CHAOSP Build STARTED"
   setup_env
-  import_keys
+
+  if [ "$(ls "${KEYS_DIR}/${DEVICE}" | wc -l)" == '0' ]; then
+  	gen_keys
+  fi
+  
   aosp_repo_init
   aosp_local_repo_additions
   aosp_repo_sync
@@ -49,9 +119,7 @@ full_run() {
   setup_vendor
   aosp_build
   release
-  upload
-  checkpoint_versions
-  notify "RattlesnakeOS Build SUCCESS"
+  echo "CHAOSP Build SUCCESS"
 }
 
 setup_env() {
@@ -73,14 +141,16 @@ setup_env() {
   git config --get --global user.email || git config --global user.email 'aosp@localhost'
   git config --global color.ui true
 
-  # mount /tmp filesystem as tmpfs
-  sudo mount -t tmpfs tmpfs /tmp || true
+  # # mount /tmp filesystem as tmpfs
+  # sudo mount -t tmpfs tmpfs /tmp || true
 
   # setup base directories
   mkdir -p "${AOSP_BUILD_DIR}"
   mkdir -p "${KEYS_DIR}"
   mkdir -p "${MISC_DIR}"
   mkdir -p "${RELEASE_TOOLS_DIR}"
+  mkdir -p "${REVISION_DIR}"
+  mkdir -p "${BINARIES_DIR}"
 
   # get core repo
   rm -rf "${CORE_DIR}"
@@ -103,7 +173,9 @@ setup_env() {
   fi
 
   # mount keys directory as tmpfs
-  sudo mount -t tmpfs -o size=20m tmpfs "${KEYS_DIR}" || true
+  if [ -z "$(ls -A ${KEYS_DIR})" ]; then
+    sudo mount -t tmpfs -o size=20m tmpfs "${KEYS_DIR}" || true
+  fi
 }
 
 aosp_repo_init() {
@@ -241,17 +313,21 @@ aosp_build() {
 
     build_target="release aosp_${DEVICE} user"
     log "Running choosecombo ${build_target}"
+
+    ccache -M 100G
+
     choosecombo ${build_target}
 
     log "Running target-files-package"
     retry m target-files-package
 
-    if [ ! -f "${RELEASE_TOOLS_DIR}/releasetools/sign_target_files_apks" ]; then
+    # Wasn't retrieving our mkbootfs patches since the file already existed!
+    #if [ ! -f "${RELEASE_TOOLS_DIR}/releasetools/sign_target_files_apks" ]; then
       log "Running m otatools-package"
       m otatools-package
       rm -rf "${RELEASE_TOOLS_DIR}"
       unzip "${AOSP_BUILD_DIR}/out/target/product/${DEVICE}/otatools.zip" -d "${RELEASE_TOOLS_DIR}"
-    fi
+    #fi
   )
 
   run_hook_if_exists "aosp_build_post"
@@ -334,46 +410,6 @@ release() {
   run_hook_if_exists "release_post"
 }
 
-upload() {
-  log_header "${FUNCNAME[0]}"
-  run_hook_if_exists "upload_pre"
-  cd "${AOSP_BUILD_DIR}/out"
-
-  build_channel="stable"
-  release_channel="${DEVICE}-${build_channel}"
-  build_date="$(< soong/build_number.txt)"
-  build_timestamp="$(unzip -p "release-${DEVICE}-${build_date}/${DEVICE}-ota_update-${build_date}.zip" "META-INF/com/android/metadata" | grep 'post-timestamp' | cut --delimiter "=" --fields 2)"
-  old_metadata=$(get_current_metadata "${release_channel}")
-  old_date="$(cut -d ' ' -f 1 <<< "${old_metadata}")"
-
-  # upload ota and set metadata
-  upload_build_artifact "${AOSP_BUILD_DIR}/out/release-${DEVICE}-${build_date}/${DEVICE}-ota_update-${build_date}.zip" "${DEVICE}-ota_update-${build_date}.zip" "public"
-  set_current_metadata "${release_channel}" "${build_date} ${build_timestamp} ${AOSP_BUILD_ID}" "public"
-  set_current_metadata "${release_channel}-true-timestamp" "${build_timestamp}" "public"
-
-  # cleanup old ota
-  delete_build_artifact "${DEVICE}-ota_update-${old_date}.zip"
-
-  # upload factory image
-  upload_build_artifact "${AOSP_BUILD_DIR}/out/release-${DEVICE}-${build_date}/${DEVICE}-factory-${build_date}.zip" "${DEVICE}-factory-latest.zip"
-
-  run_hook_if_exists "upload_post"
-}
-
-checkpoint_versions() {
-  log_header "${FUNCNAME[0]}"
-  run_hook_if_exists "checkpoint_versions_pre"
-
-  set_current_metadata "${DEVICE}-vendor" "${AOSP_BUILD_ID}" "public"
-  set_current_metadata "release" "${RELEASE}"
-  set_current_metadata "rattlesnakeos-stack/revision" "${STACK_VERSION}"
-  if [ "${CHROMIUM_BUILD_DISABLED}" == "false" ]; then
-      set_current_metadata "chromium/included" "yes"
-  fi
-
-  run_hook_if_exists "checkpoint_versions_post"
-}
-
 gen_keys() {
   log_header "${FUNCNAME[0]}"
 
@@ -390,7 +426,7 @@ gen_keys() {
   cd "${KEYS_DIR}/${DEVICE}"
   for key in {releasekey,platform,shared,media,networkstack} ; do
     # make_key exits with unsuccessful code 1 instead of 0, need ! to negate
-    ! "${make_key}" "${key}" "/CN=RattlesnakeOS"
+    ! "${make_key}" "${key}" "/CN=CHAOSP"
   done
 
   # generate avb key
@@ -400,7 +436,7 @@ gen_keys() {
   # generate chromium.keystore
   cd "${KEYS_DIR}/${DEVICE}"
   keytool -genkey -v -keystore chromium.keystore -storetype pkcs12 -alias chromium -keyalg RSA -keysize 4096 \
-        -sigalg SHA512withRSA -validity 10000 -dname "cn=RattlesnakeOS" -storepass chromium
+        -sigalg SHA512withRSA -validity 10000 -dname "cn=CHAOSP" -storepass chromium
 }
 
 run_hook_if_exists() {
@@ -479,8 +515,11 @@ chromium_build_if_required() {
     log "Chromium build is disabled"
     return
   fi
+  
+  if [ -e "${REVISION_DIR}/chromium" ]; then
+    current=$(cat ${REVISION_DIR}/chromium)
+  fi
 
-  current=$(get_current_metadata "chromium/revision")
   log "Chromium current: ${current}"
 
   log "Chromium requested: ${CHROMIUM_VERSION}"
@@ -491,8 +530,6 @@ chromium_build_if_required() {
     build_chromium "${CHROMIUM_VERSION}"
   fi
 
-  log "Deleting chromium directory ${CHROMIUM_BUILD_DIR}"
-  rm -rf "${CHROMIUM_BUILD_DIR}"
 }
 
 build_chromium() {
@@ -572,11 +609,13 @@ EOF
       "${APKSIGNER}" sign --ks "${KEYSTORE}" --ks-pass pass:chromium --ks-key-alias chromium --in "../${app}6432.apk" --out "${app}.apk"
     done
 
-    log "Uploading trichrome apks"
-    upload_build_artifact "TrichromeLibrary.apk" "chromium/TrichromeLibrary.apk"
-    upload_build_artifact "TrichromeWebView.apk" "chromium/TrichromeWebView.apk"
-    upload_build_artifact "TrichromeChrome.apk" "chromium/TrichromeChrome.apk"
-    set_current_metadata "chromium/revision" "${CHROMIUM_REVISION}"
+    log "Copying trichrome apks"
+    #outside of AOSP dir
+    cp "TrichromeLibrary.apk" "${BINARIES_DIR}/TrichromeLibrary.apk"
+    cp "TrichromeWebView.apk" "${BINARIES_DIR}/TrichromeWebView.apk"
+    cp "TrichromeChrome.apk" "${BINARIES_DIR}/TrichromeChrome.apk"
+
+    echo "${CHROMIUM_REVISION}" > "${REVISION_DIR}/chromium"
 
     run_hook_if_exists "build_chromium_post"
   )
@@ -590,13 +629,12 @@ chromium_copy_to_build_tree_if_required() {
     return
   fi
 
-  # add latest built chromium to external/chromium
-  download_build_artifact "chromium/TrichromeLibrary.apk" "${AOSP_BUILD_DIR}/external/chromium/prebuilt/arm64/"
-  download_build_artifact "chromium/TrichromeWebView.apk" "${AOSP_BUILD_DIR}/external/chromium/prebuilt/arm64/"
-  download_build_artifact "chromium/TrichromeChrome.apk" "${AOSP_BUILD_DIR}/external/chromium/prebuilt/arm64/"
+  # add latest built chromium to external/chromium in AOSP dir, to be included during the build
+  mkdir -p "${AOSP_BUILD_DIR}/external/chromium/prebuilt/arm64/"
+  cp "${BINARIES_DIR}/TrichromeLibrary.apk" "${AOSP_BUILD_DIR}/external/chromium/prebuilt/arm64/"
+  cp "${BINARIES_DIR}/TrichromeWebView.apk" "${AOSP_BUILD_DIR}/external/chromium/prebuilt/arm64/"
+  cp "${BINARIES_DIR}/TrichromeChrome.apk" "${AOSP_BUILD_DIR}/external/chromium/prebuilt/arm64/"
 }
-
-trap cleanup 0
 
 set -e
 
