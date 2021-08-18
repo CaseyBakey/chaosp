@@ -25,6 +25,10 @@ ARGUMENT_LIST=(
     "aosp-tag"
     "chromium-version"
     "bromite"
+    "mimick-google"
+    "add-magisk"
+    "add-bitgapps"
+    "use-custom-bootanimation"
 )
 
 
@@ -62,6 +66,20 @@ while [[ $# -gt 0 ]]; do
             ;;
         --bromite)
             APPLY_BROMITE_PATCHES=true
+        --mimick-google)
+            MIMICK_GOOGLE_BUILDS="true"
+            shift 1
+            ;;
+        --add-magisk)
+            ADD_MAGISK="true"
+            shift 1
+            ;;
+        --add-bitgapps)
+            ADD_BITGAPPS="true"
+            shift 1
+            ;;
+        --use-custom-bootanimation)
+            USE_CUSTOM_BOOTANIMATION="true"
             shift 1
             ;;
         *)
@@ -360,9 +378,11 @@ env_setup_script() {
   export LANG=C
   export _JAVA_OPTIONS=-XX:-UsePerfData
   # shellcheck disable=SC2155
-  export BUILD_NUMBER=$(cat out/soong/build_number.txt 2>/dev/null || date --utc +%Y.%m.%d.%H)
-  log "BUILD_NUMBER=${BUILD_NUMBER}"
-  export DISPLAY_BUILD_NUMBER=true
+  if [ ! -v "${MIMICK_GOOGLE_BUILDS}" ]; then
+    export BUILD_NUMBER=$(cat out/soong/build_number.txt 2>/dev/null || date --utc +%Y.%m.%d.%H)
+    log "BUILD_NUMBER=${BUILD_NUMBER}"
+    export DISPLAY_BUILD_NUMBER=true
+  fi
   chrt -b -p 0 $$
 }
 
@@ -381,8 +401,12 @@ aosp_build() {
 
   (
     env_setup_script
-
-    build_target="release aosp_${DEVICE} user"
+    if [ "${MIMICK_GOOGLE_BUILDS}" = true ]; then
+      build_target="release ${DEVICE} user"
+    else
+      build_target="release aosp_${DEVICE} user"
+    fi
+    
     log "Running choosecombo ${build_target}"
 
     ccache -M 100G
@@ -419,7 +443,9 @@ release() {
     log "Running clear-factory-images-variables.sh"
     source "device/common/clear-factory-images-variables.sh"
     DEVICE="${device}"
-    PREFIX="aosp_"
+    if [ ! -v ${MIMICK_GOOGLE_BUILDS} ]; then
+      PREFIX="aosp_"
+    fi
     BUILD="${BUILD_NUMBER}"
     # shellcheck disable=SC2034
     PRODUCT="${DEVICE}"
