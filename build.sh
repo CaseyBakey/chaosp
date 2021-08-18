@@ -660,7 +660,7 @@ build_chromium() {
     CHROMIUM_BUILD_DIR="${ROOT_DIR}/chromium"
     mkdir -p "${CHROMIUM_BUILD_DIR}"
     cd "${CHROMIUM_BUILD_DIR}"
-    fetch --nohooks android
+    fetch --nohooks android || gclient sync -D --with_branch_heads --with_tags --jobs 32 -RDf && cd src && git fetch && cd -
     cd src
 
     # checkout specific revision
