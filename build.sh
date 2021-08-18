@@ -312,10 +312,10 @@ aosp_repo_sync() {
 
   run_hook_if_exists "aosp_repo_sync_pre"
 
-  if [ "$(ls -l "${AOSP_BUILD_DIR}" | wc -l)" -gt 0 ]; then
-    log "Running git reset and clean as environment appears to already have been synced previously"
-    repo forall -c 'git reset --hard ; git clean --force -dx'
-  fi
+  # if [ "$(ls -l "${AOSP_BUILD_DIR}" | wc -l)" -gt 0 ]; then
+  #   log "Running git reset and clean as environment appears to already have been synced previously"
+  #   repo forall -c 'git reset --hard ; git clean --force -dx'
+  # fi
 
   for i in {1..10}; do
     log "Running aosp repo sync attempt ${i}/10"
