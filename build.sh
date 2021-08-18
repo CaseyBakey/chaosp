@@ -24,6 +24,7 @@ ARGUMENT_LIST=(
     "aosp-build"
     "aosp-tag"
     "chromium-version"
+    "bromite"
 )
 
 
@@ -58,6 +59,10 @@ while [[ $# -gt 0 ]]; do
         --chromium-version)
             CHROMIUM_VERSION=$2
             shift 2
+            ;;
+        --bromite)
+            APPLY_BROMITE_PATCHES=true
+            shift 1
             ;;
         *)
             break
@@ -159,6 +164,7 @@ CORE_VENDOR_BASEDIR="${AOSP_BUILD_DIR}/vendor/core"
 CORE_VENDOR_MAKEFILE="${CORE_VENDOR_BASEDIR}/vendor/config/main.mk"
 CUSTOM_VENDOR_BASEDIR="${AOSP_BUILD_DIR}/vendor/custom"
 CUSTOM_VENDOR_MAKEFILE="${CUSTOM_VENDOR_BASEDIR}/vendor/config/main.mk"
+BROMITE_DIR="${ROOT_DIR}/bromite"
 
 CORE_CONFIG_REPO="https://github.com/RattlesnakeOS/core-config-repo.git"
 CUSTOM_CONFIG_REPO="https://github.com/CaseyBakey/example-custom-config-repo.git"
@@ -176,6 +182,9 @@ full_run() {
   aosp_repo_init
   aosp_local_repo_additions
   aosp_repo_sync
+  if [ "${APPLY_BROMITE_PATCHES}" = true ]; then
+    get_bromite
+  fi
   chromium_build_if_required
   chromium_copy_to_build_tree_if_required
   setup_vendor
@@ -594,6 +603,19 @@ chromium_build_if_required() {
 
 }
 
+get_bromite() {
+  log_header "${FUNCNAME[0]}"
+  rm -rf "${BROMITE_DIR}"
+  git clone https://github.com/bromite/bromite.git "${BROMITE_DIR}"
+
+  rm -rf "${CHROMIUM_BUILD_DIR}/src/.git/rebase-apply/"
+
+  CHROMIUM_VERSION=$(cat "${BROMITE_DIR}/build/RELEASE")
+  BROMITE_ARGS=$(cat "${BROMITE_DIR}/build/GN_ARGS")
+
+  echo "Will build Chromium/Bromite ${CHROMIUM_VERSION}"
+}
+
 build_chromium() {
   log_header "${FUNCNAME[0]}"
   CHROMIUM_REVISION="$1"
@@ -653,6 +675,7 @@ trichrome_certdigest = "${trichrome_certdigest}"
 chrome_public_manifest_package = "org.chromium.chrome"
 system_webview_package_name = "org.chromium.webview"
 trichrome_library_package = "org.chromium.trichromelibrary"
+${BROMITE_ARGS}
 EOF
     gn gen out/Default
 
