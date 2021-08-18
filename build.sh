@@ -170,7 +170,7 @@ echo "DEVICE_EXTRA_OTA=${DEVICE_EXTRA_OTA}"
 ######## OTHER VARS ####################
 ########################################
 SECONDS=0
-ROOT_DIR=$(dirname $0)
+ROOT_DIR=$(dirname $(realpath $0))
 REVISION_DIR="${ROOT_DIR}/revision"
 BINARIES_DIR="${ROOT_DIR}/binaries"
 AOSP_BUILD_DIR="${ROOT_DIR}/aosp"
