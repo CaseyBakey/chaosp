@@ -65,7 +65,9 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --bromite)
-            APPLY_BROMITE_PATCHES=true
+            APPLY_BROMITE_PATCHES="true"
+            shift 1
+            ;;
         --mimick-google)
             MIMICK_GOOGLE_BUILDS="true"
             shift 1
