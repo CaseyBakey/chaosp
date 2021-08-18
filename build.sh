@@ -3,20 +3,72 @@
 ########################################
 ######## BUILD ARGS ####################
 ########################################
-RELEASE=$1
-echo "RELEASE=${RELEASE}"
-AOSP_BUILD_ID=$2
-echo "AOSP_BUILD_ID=${AOSP_BUILD_ID}"
-AOSP_TAG=$3
-echo "AOSP_TAG=${AOSP_TAG}"
-CHROMIUM_VERSION=$4
-echo "CHROMIUM_VERSION=${CHROMIUM_VERSION}"
-CHROMIUM_FORCE_BUILD=$5
-echo "CHROMIUM_FORCE_BUILD=${CHROMIUM_FORCE_BUILD}"
-LOCAL_MANIFEST_REVISIONS=$6
-echo "LOCAL_MANIFEST_REVISIONS=${LOCAL_MANIFEST_REVISIONS}"
+#RELEASE=$1
+#echo "RELEASE=${RELEASE}"
+#AOSP_BUILD_ID=$2
+#echo "AOSP_BUILD_ID=${AOSP_BUILD_ID}"
+#AOSP_TAG=$3
+#echo "AOSP_TAG=${AOSP_TAG}"
+#CHROMIUM_VERSION=$4
+#echo "CHROMIUM_VERSION=${CHROMIUM_VERSION}"
+#CHROMIUM_FORCE_BUILD=$5
+#echo "CHROMIUM_FORCE_BUILD=${CHROMIUM_FORCE_BUILD}"
+#LOCAL_MANIFEST_REVISIONS=$6
+#echo "LOCAL_MANIFEST_REVISIONS=${LOCAL_MANIFEST_REVISIONS}"
 
 #### <generated_vars_and_funcs.sh> ####
+
+ARGUMENT_LIST=(
+    "device"
+    "release"
+    "aosp-build"
+    "aosp-tag"
+    "chromium-version"
+)
+
+
+# read arguments
+opts=$(getopt \
+    --longoptions "$(printf "%s:," "${ARGUMENT_LIST[@]}")" \
+    --name "$(basename "$0")" \
+    --options "" \
+    -- "$@"
+)
+
+eval set --$opts
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --device)
+          DEVICE=$2
+          shift 2
+          ;;
+        --release)
+            RELEASE=$2
+            shift 2
+            ;;
+        --aosp-build)
+            AOSP_BUILD_ID=$2
+            shift 2
+            ;;
+        --aosp-tag)
+            AOSP_TAG=$2
+            shift 2
+            ;;
+        --chromium-version)
+            CHROMIUM_VERSION=$2
+            shift 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+if [[ -z "$RELEASE" || -z $AOSP_BUILD_ID || -z $AOSP_TAG || -z $DEVICE ]]; then
+  echo "--release, --aosp-build, aosp-tag and --device are mandatory options!"
+  exit 1
+fi
 
 case "${DEVICE}" in
   blueline)
@@ -78,6 +130,16 @@ case "${DEVICE}" in
     exit 1
     ;;
 esac
+
+echo "RELEASE=${RELEASE}"
+echo "AOSP_BUILD_ID=${AOSP_BUILD_ID}"
+echo "AOSP_TAG=${AOSP_TAG}"
+echo "CHROMIUM_VERSION=${CHROMIUM_VERSION}"
+echo "CHROMIUM_FORCE_BUILD=${CHROMIUM_FORCE_BUILD}"
+echo "DEVICE_FRIENDLY=${DEVICE_FRIENDLY}"
+echo "DEVICE_FAMILY=${DEVICE_FAMILY}"
+echo "DEVICE_AVB_MODE=${DEVICE_AVB_MODE}"
+echo "DEVICE_EXTRA_OTA=${DEVICE_EXTRA_OTA}"
 
 ########################################
 ######## OTHER VARS ####################
