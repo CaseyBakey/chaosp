@@ -90,8 +90,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$RELEASE" || -z $AOSP_BUILD_ID || -z $AOSP_TAG || -z $DEVICE ]]; then
-  echo "--release, --aosp-build, aosp-tag and --device are mandatory options!"
+if [[ -z "${RELEASE}" || -z "${AOSP_BUILD_ID}" || -z "${AOSP_TAG}" || -z "${DEVICE}" || ( -z "${APPLY_BROMITE_PATCHES}" && -z "${CHROMIUM_VERSION}" ) ]]; then
+  echo "--release, --aosp-build, --aosp-tag, --device and (--bromite or --chromium-version) are mandatory options!"
   exit 1
 fi
 
