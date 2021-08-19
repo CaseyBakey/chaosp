@@ -205,7 +205,7 @@ full_run() {
   aosp_repo_init
   aosp_local_repo_additions
   aosp_repo_sync
-  if [ "${APPLY_BROMITE_PATCHES}" = true ]; then
+  if [ "${APPLY_BROMITE_PATCHES}" == "true" ]; then
     get_bromite
   fi
   chromium_build_if_required
@@ -415,7 +415,7 @@ aosp_build() {
 
   (
     env_setup_script
-    if [ "${MIMICK_GOOGLE_BUILDS}" = true ]; then
+    if [ "${MIMICK_GOOGLE_BUILDS}" == "true" ]; then
       build_target="release ${DEVICE} user"
     else
       build_target="release aosp_${DEVICE} user"
