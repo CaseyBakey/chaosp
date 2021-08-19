@@ -193,6 +193,9 @@ full_run() {
   log_header "${FUNCNAME[0]}"
 
   echo "CHAOSP Build STARTED"
+  
+  revert_patches_from_previous_run
+  
   setup_env
 
   if [ "$(ls "${KEYS_DIR}/${DEVICE}" | wc -l)" == '0' ]; then
@@ -211,6 +214,15 @@ full_run() {
   aosp_build
   release
   echo "CHAOSP Build SUCCESS"
+}
+
+revert_patches_from_previous_run() {
+  log_header "${FUNCNAME[0]}"
+
+  if [ -d "${AOSP_BUILD_DIR}" ]; then
+    cd "${AOSP_BUILD_DIR}"
+    repo forall -vc "git reset --hard" >/dev/null 2>&1 || true
+  fi
 }
 
 setup_env() {
