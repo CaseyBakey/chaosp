@@ -221,7 +221,7 @@ revert_patches_from_previous_run() {
 
   if [ -d "${AOSP_BUILD_DIR}" ]; then
     cd "${AOSP_BUILD_DIR}"
-    repo forall -vc "git reset --hard" >/dev/null 2>&1 || true
+    repo forall -vc "git clean -f ; git reset --hard" >/dev/null 2>&1 || true
   fi
 }
 
