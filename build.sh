@@ -66,23 +66,23 @@ while [[ $# -gt 0 ]]; do
             ;;
         --bromite)
             APPLY_BROMITE_PATCHES="true"
-            shift 1
+            shift 2
             ;;
         --mimick-google)
             MIMICK_GOOGLE_BUILDS="true"
-            shift 1
+            shift 2
             ;;
         --add-magisk)
             ADD_MAGISK="true"
-            shift 1
+            shift 2
             ;;
         --add-bitgapps)
             ADD_BITGAPPS="true"
-            shift 1
+            shift 2
             ;;
         --use-custom-bootanimation)
             USE_CUSTOM_BOOTANIMATION="true"
-            shift 1
+            shift 2
             ;;
         *)
             break
