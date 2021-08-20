@@ -279,6 +279,7 @@ mimick_google_builds(){
   sed -i "s@PRODUCT_NAME := aosp_${DEVICE}@PRODUCT_NAME := ${DEVICE}@" "${PRODUCT_MAKEFILE}" || true
   sed -i "s@PRODUCT_BRAND := Android@PRODUCT_BRAND := google@" "${PRODUCT_MAKEFILE}" || true
   sed -i "s@aosp_${DEVICE}.mk@${DEVICE}.mk@g" "${AOSP_BUILD_DIR}/device/google/${DEVICE_FAMILY}/AndroidProducts.mk" || true
+  sed -i "s@aosp_${DEVICE}-userdebug@${DEVICE}-userdebug@g" "${AOSP_BUILD_DIR}/device/google/${DEVICE_FAMILY}/AndroidProducts.mk" || true
 
   # Already done in core repo config
   #sed -i "s/PRODUCT_MODEL := AOSP on ${DEVICE}/PRODUCT_MODEL := ${DEVICE_FRIENDLY}/" "${PRODUCT_MAKEFILE}"
