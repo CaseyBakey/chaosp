@@ -211,6 +211,10 @@ full_run() {
   chromium_build_if_required
   chromium_copy_to_build_tree_if_required
   setup_vendor
+  # Mimick Google builds
+  if [ "${MIMICK_GOOGLE_BUILDS}" == "true" ]; then
+    mimick_google_builds
+  fi
   aosp_build
   release
   echo "CHAOSP Build SUCCESS"
@@ -223,6 +227,61 @@ revert_patches_from_previous_run() {
     cd "${AOSP_BUILD_DIR}"
     repo forall -vc "git clean -f ; git reset --hard" >/dev/null 2>&1 || true
   fi
+}
+
+# Dirty function to mimick Google builds fingerprint and be able to use Google Apps without having to register our GSF ID online
+mimick_google_builds(){
+  log_header "${FUNCNAME[0]}"
+  BUILD_LOWER=$(echo ${AOSP_BUILD_ID} | tr '[:upper:]' '[:lower:]')
+
+  cd "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/${BUILD_LOWER}/"
+
+  rm -rf "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/${BUILD_LOWER}/${DEVICE}-${BUILD_LOWER}/"
+  rm -rf "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/${BUILD_LOWER}/boot.img"
+  rm -rf "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/${BUILD_LOWER}/magisk-latest"
+  rm -rf "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/${BUILD_LOWER}/magisk-latest.zip"
+  rm -rf "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/${BUILD_LOWER}/BOOT_EXTRACT"
+
+  unzip "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/${BUILD_LOWER}/${DEVICE}-${BUILD_LOWER}-factory-*.zip" >/dev/null 2>&1
+  unzip "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/${BUILD_LOWER}/${DEVICE}-${BUILD_LOWER}/image-${DEVICE}-${BUILD_LOWER}.zip" boot.img >/dev/null 2>&1
+
+  # Download latest Magisk release
+  curl -s https://api.github.com/repos/topjohnwu/Magisk/releases | grep "Magisk-v.*.apk" |grep https|head -n 1| cut -d : -f 2,3|tr -d \" | wget -O magisk-latest.zip -qi -
+  # Extract the downloaded APK/zip
+  unzip -d magisk-latest magisk-latest.zip >/dev/null 2>&1
+  # Make the fakely-librarized magiskboot executable
+  chmod +x ./magisk-latest/lib/x86/libmagiskboot.so
+
+  mkdir -p BOOT_EXTRACT
+  cd BOOT_EXTRACT
+
+  ../magisk-latest/lib/x86/libmagiskboot.so unpack ../boot.img >/dev/null 2>&1
+  mkdir ramdisk
+  cd ramdisk
+  ../../magisk-latest/lib/x86/libmagiskboot.so cpio ../ramdisk.cpio extract >/dev/null 2>&1
+
+  BUILD_DATETIME=$(cat default.prop | grep -i ro.build.date.utc | cut -d "=" -f 2)
+  BUILD_USERNAME=$(cat default.prop | grep -i ro.build.user | cut -d "=" -f 2)
+  BUILD_NUMBER=$(cat default.prop | grep -i ro.build.version.incremental | cut -d "=" -f 2)
+  BUILD_HOSTNAME=$(cat default.prop | grep -i ro.build.host | cut -d "=" -f 2)
+
+  printf "Values exported:\n BUILD_DATETIME=$BUILD_DATETIME\n BUILD_USERNAME=$BUILD_USERNAME\n BUILD_NUMBER=$BUILD_NUMBER\n BUILD_HOSTNAME=$BUILD_HOSTNAME"
+
+  export BUILD_DATETIME
+  export BUILD_USERNAME
+  export BUILD_NUMBER
+  export BUILD_HOSTNAME
+  export PRODUCT_MAKEFILE="${AOSP_BUILD_DIR}/device/google/${DEVICE_FAMILY}/${DEVICE}.mk"
+
+  cd "${AOSP_BUILD_DIR}/device/google/${DEVICE_FAMILY}/"
+  cp "aosp_${DEVICE}.mk" "${PRODUCT_MAKEFILE}"
+
+  sed -i "s@PRODUCT_NAME := aosp_${DEVICE}@PRODUCT_NAME := ${DEVICE}@" "${PRODUCT_MAKEFILE}" || true
+  sed -i "s@PRODUCT_BRAND := Android@PRODUCT_BRAND := google@" "${PRODUCT_MAKEFILE}" || true
+  sed -i "s@aosp_${DEVICE}.mk@${DEVICE}.mk@g" "${AOSP_BUILD_DIR}/device/google/${DEVICE_FAMILY}/AndroidProducts.mk" || true
+
+  # Already done in core repo config
+  #sed -i "s/PRODUCT_MODEL := AOSP on ${DEVICE}/PRODUCT_MODEL := ${DEVICE_FRIENDLY}/" "${PRODUCT_MAKEFILE}"
 }
 
 setup_env() {
