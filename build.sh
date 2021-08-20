@@ -100,6 +100,11 @@ if [[ -z "${RELEASE}" || -z "${AOSP_BUILD_ID}" || -z "${AOSP_TAG}" || -z "${DEVI
   exit 1
 fi
 
+if [[ "${ADD_BITGAPPS}" == "true" && "${MIMICK_GOOGLE_BUILDS}" != "true" ]]; then
+  echo "If you want to add gapps, you also need to mimick google builds (--mimick-google true) to avoid Play Protect errors at runtime!"
+  exit 1
+fi
+
 case "${DEVICE}" in
   blueline)
     DEVICE_FRIENDLY="Pixel 3"
