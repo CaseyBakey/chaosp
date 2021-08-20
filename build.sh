@@ -415,18 +415,18 @@ setup_vendor() {
   fi
 
   # get vendor files (with timeout)
-  timeout 30m "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/execute-all.sh" --debugfs --yes --device "${DEVICE}" \
+  timeout 30m "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/execute-all.sh" --debugfs --yes --keep --device "${DEVICE}" \
       --buildID "${AOSP_BUILD_ID}" --output "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor"
 
   # copy vendor files to build tree
   mkdir --parents "${AOSP_BUILD_DIR}/vendor/google_devices" || true
   rm -rf "${AOSP_BUILD_DIR}/vendor/google_devices/${DEVICE}" || true
-  mv "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/$(tr '[:upper:]' '[:lower:]' <<< "${AOSP_BUILD_ID}")/vendor/google_devices/${DEVICE}" "${AOSP_BUILD_DIR}/vendor/google_devices"
+  cp -rf "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/$(tr '[:upper:]' '[:lower:]' <<< "${AOSP_BUILD_ID}")/vendor/google_devices/${DEVICE}" "${AOSP_BUILD_DIR}/vendor/google_devices"
 
   # smaller devices need big brother vendor files
   if [ "${DEVICE}" != "${DEVICE_FAMILY}" ]; then
     rm -rf "${AOSP_BUILD_DIR}/vendor/google_devices/${DEVICE_FAMILY}" || true
-    mv "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/$(tr '[:upper:]' '[:lower:]' <<< "${AOSP_BUILD_ID}")/vendor/google_devices/${DEVICE_FAMILY}" "${AOSP_BUILD_DIR}/vendor/google_devices"
+    cp -rf "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/${DEVICE}/$(tr '[:upper:]' '[:lower:]' <<< "${AOSP_BUILD_ID}")/vendor/google_devices/${DEVICE_FAMILY}" "${AOSP_BUILD_DIR}/vendor/google_devices"
   fi
 
   run_hook_if_exists "setup_vendor_post"
