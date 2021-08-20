@@ -28,6 +28,7 @@ ARGUMENT_LIST=(
     "mimick-google"
     "add-magisk"
     "add-bitgapps"
+    "bypass-safetynet"
     "use-custom-bootanimation"
 )
 
@@ -78,6 +79,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --add-bitgapps)
             ADD_BITGAPPS="true"
+            shift 2
+            ;;
+        --bypass-safetynet)
+            SAFETYNET_BYPASS="true"
             shift 2
             ;;
         --use-custom-bootanimation)
