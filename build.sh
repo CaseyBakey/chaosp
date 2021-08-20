@@ -228,16 +228,19 @@ revert_patches_from_previous_run() {
 setup_env() {
   log_header "${FUNCNAME[0]}"
 
+  if [ ! -f "${ROOT_DIR}/.aosp_build_deps_done" ]; then
   # install required packages
-  sudo apt-get update
-  sudo DEBIAN_FRONTEND=noninteractive apt-get -y install python python2.7 python3 gperf jq default-jdk git-core gnupg \
-      flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev \
-      x11proto-core-dev libx11-dev lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip liblz4-tool \
-      libncurses5 wget parallel rsync python-protobuf python3-protobuf python3-pip
+    sudo apt-get update
+    sudo DEBIAN_FRONTEND=noninteractive apt-get -y install python python2.7 python3 gperf jq default-jdk git-core gnupg \
+        flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev \
+        x11proto-core-dev libx11-dev lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip liblz4-tool \
+        libncurses5 wget parallel rsync python-protobuf python3-protobuf python3-pip
 
-  retry curl --fail -s https://storage.googleapis.com/git-repo-downloads/repo > /tmp/repo
-  chmod +x /tmp/repo
-  sudo mv /tmp/repo /usr/local/bin/
+    retry curl --fail -s https://storage.googleapis.com/git-repo-downloads/repo > /tmp/repo
+    chmod +x /tmp/repo
+    sudo mv /tmp/repo /usr/local/bin/
+    touch "${ROOT_DIR}/.aosp_build_deps_done"
+  fi
 
   # setup git
   git config --get --global user.name || git config --global user.name 'aosp'
@@ -682,7 +685,10 @@ build_chromium() {
     echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
     log "Installing chromium build dependencies"
 
-    sudo ./build/install-build-deps-android.sh
+    if [ ! -f "${ROOT_DIR}/.chromium_build_deps_done" ]; then
+      sudo ./build/install-build-deps-android.sh
+      touch "${ROOT_DIR}/.chromium_build_deps_done"
+    fi
 
     # run gclient sync (runhooks will run as part of this)
     log "Running gclient sync (this takes a while)"
