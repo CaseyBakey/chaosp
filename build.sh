@@ -520,7 +520,7 @@ release() {
     log "Running clear-factory-images-variables.sh"
     source "device/common/clear-factory-images-variables.sh"
     DEVICE="${device}"
-    if [[ ! -v ${MIMICK_GOOGLE_BUILDS} ]]; then
+    if [ ${MIMICK_GOOGLE_BUILDS} != "true" ]; then
       PREFIX="aosp_"
     fi
     BUILD="${BUILD_NUMBER}"
