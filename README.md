@@ -42,7 +42,7 @@ Here are the mandatory ones:
   For this one, you have to give "release" as value (I need to check where it's really used, since it's inherited from RattlesnakeOS)  
 * --aosp-build <em>RQ3A.210805.001.A1</em>  
   Here, give the desired AOSP build number; You should take a look at [Source code tags and builds](https://source.android.com/setup/start/build-numbers#source-code-tags-and-builds) to know what is the latest release for your device.  
-* --aosp-tag <em>android-11.0.0_r40</em>  
+* --aosp-branch <em>android-11.0.0_r40</em>  
   Here, give the related AOSP branch that you find on the above link.  
 * --device <em>blueline</em>  
   Here, give the device for which you're building CHAOSP (it has to be an AOSP supported device). The supported devices on August 2021 are: blueline, crosshatch, sargo, bonito, flame, coral, sunfish, bramble and redfin.  
@@ -64,7 +64,7 @@ Here are the optional ones:
   This one adds [Magisk](https://github.com/topjohnwu/Magisk) to your build image. Once the build flashed on your device, you'll need to adb install the Magisk Manager.  
 
 For example:  
-./build.sh --release release --aosp-build RQ3A.210805.001.A1 --aosp-tag android-11.0.0_r40 --device blueline --chromium-version 92.0.4515.134  
+./build.sh --release release --aosp-build RQ3A.210805.001.A1 --aosp-branch android-11.0.0_r40 --device blueline --chromium-version 92.0.4515.134  
 
 will build AOSP version 11, with the latest security fixes (on August 2021), with Chromium 92.0.4515.134 for the Pixel 3 (blueline) device.  
 

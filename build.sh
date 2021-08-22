@@ -22,7 +22,7 @@ ARGUMENT_LIST=(
     "device"
     "release"
     "aosp-build"
-    "aosp-tag"
+    "aosp-branch"
     "chromium-version"
     "bromite"
     "mimick-google"
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
             AOSP_BUILD_ID=$2
             shift 2
             ;;
-        --aosp-tag)
+        --aosp-branch)
             AOSP_TAG=$2
             shift 2
             ;;
@@ -96,7 +96,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${RELEASE}" || -z "${AOSP_BUILD_ID}" || -z "${AOSP_TAG}" || -z "${DEVICE}" || ( -z "${APPLY_BROMITE_PATCHES}" && -z "${CHROMIUM_VERSION}" ) ]]; then
-  echo "--release, --aosp-build, --aosp-tag, --device and (--bromite or --chromium-version) are mandatory options!"
+  echo "--release, --aosp-build, --aosp-branch, --device and (--bromite or --chromium-version) are mandatory options!"
   exit 1
 fi
 
