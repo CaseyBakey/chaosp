@@ -304,7 +304,7 @@ setup_env() {
     sudo DEBIAN_FRONTEND=noninteractive apt-get -y install python python2.7 python3 gperf jq default-jdk git-core gnupg \
         flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev \
         x11proto-core-dev libx11-dev lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip liblz4-tool \
-        libncurses5 wget parallel rsync python-protobuf python3-protobuf python3-pip
+        libncurses5 wget parallel rsync python-protobuf python3-protobuf python3-pip git-lfs
 
     retry curl --fail -s https://storage.googleapis.com/git-repo-downloads/repo > /tmp/repo
     chmod +x /tmp/repo
