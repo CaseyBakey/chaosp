@@ -756,10 +756,10 @@ build_chromium() {
     git checkout "${CHROMIUM_REVISION}" -f
 
     # install dependencies
-    echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
     log "Installing chromium build dependencies"
 
     if [ ! -f "${ROOT_DIR}/.chromium_build_deps_done" ]; then
+      echo ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true | sudo debconf-set-selections
       sudo ./build/install-build-deps-android.sh
       touch "${ROOT_DIR}/.chromium_build_deps_done"
     fi
