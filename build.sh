@@ -741,6 +741,8 @@ build_chromium() {
     if [ ! -d "${MISC_DIR}/depot_tools" ]; then
       retry git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "${MISC_DIR}/depot_tools"
     fi
+    cd "${MISC_DIR}/depot_tools"
+    git pull origin master
     export PATH="${PATH}:${MISC_DIR}/depot_tools"
 
     # fetch chromium
