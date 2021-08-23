@@ -306,6 +306,7 @@ setup_env() {
         x11proto-core-dev libx11-dev lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip liblz4-tool \
         libncurses5 wget parallel rsync python-protobuf python3-protobuf python3-pip git-lfs
 
+    git lfs install
     pip3 install -U protobuf
     retry curl --fail -s https://storage.googleapis.com/git-repo-downloads/repo > /tmp/repo
     chmod +x /tmp/repo
