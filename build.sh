@@ -467,7 +467,7 @@ env_setup_script() {
   export LANG=C
   export _JAVA_OPTIONS=-XX:-UsePerfData
   # shellcheck disable=SC2155
-  if [[ ! -v "${MIMICK_GOOGLE_BUILDS}" ]]; then
+  if [[ ! "${MIMICK_GOOGLE_BUILDS}" ]]; then
     export BUILD_NUMBER=$(cat out/soong/build_number.txt 2>/dev/null || date --utc +%Y.%m.%d.%H)
     log "BUILD_NUMBER=${BUILD_NUMBER}"
     export DISPLAY_BUILD_NUMBER=true
