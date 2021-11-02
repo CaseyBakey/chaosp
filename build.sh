@@ -275,7 +275,7 @@ mimick_google_builds(){
   BUILD_NUMBER=$(cat default.prop | grep -i ro.build.version.incremental | cut -d "=" -f 2)
   BUILD_HOSTNAME=$(cat default.prop | grep -i ro.build.host | cut -d "=" -f 2)
 
-  printf "Values exported:\n BUILD_DATETIME=$BUILD_DATETIME\n BUILD_USERNAME=$BUILD_USERNAME\n BUILD_NUMBER=$BUILD_NUMBER\n BUILD_HOSTNAME=$BUILD_HOSTNAME"
+  printf "Values exported:\n BUILD_DATETIME=$BUILD_DATETIME\n BUILD_USERNAME=$BUILD_USERNAME\n BUILD_NUMBER=$BUILD_NUMBER\n BUILD_HOSTNAME=$BUILD_HOSTNAME\n"
 
   export BUILD_DATETIME
   export BUILD_USERNAME
