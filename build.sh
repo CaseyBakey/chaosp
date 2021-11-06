@@ -301,10 +301,10 @@ setup_env() {
   if [ ! -f "${ROOT_DIR}/.aosp_build_deps_done" ]; then
   # install required packages
     sudo apt-get update
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -y install python python2.7 python3 gperf jq default-jdk git-core gnupg \
+    sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apt-transport-https ca-certificates python python2.7 python3 gperf jq default-jdk git-core gnupg \
         flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev \
         x11proto-core-dev libx11-dev lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip liblz4-tool \
-        libncurses5 wget parallel rsync python-protobuf python3-protobuf python3-pip git-lfs
+        libncurses5 wget parallel rsync python-protobuf python3-protobuf python3-pip libarchive-tools git-lfs
 
     git lfs install
     pip3 install -U protobuf
@@ -464,14 +464,19 @@ env_setup_script() {
   cd "${AOSP_BUILD_DIR}"
 
   source build/envsetup.sh
-  export LANG=C
+  export LANG=en_US.UTF-8
   export _JAVA_OPTIONS=-XX:-UsePerfData
   # shellcheck disable=SC2155
   if [[ ! "${MIMICK_GOOGLE_BUILDS}" ]]; then
-    export BUILD_NUMBER=$(cat out/soong/build_number.txt 2>/dev/null || date --utc +%Y.%m.%d.%H)
-    log "BUILD_NUMBER=${BUILD_NUMBER}"
+    export BUILD_DATETIME=$(cat out/build_date.txt 2>/dev/null || date -u +%s)
+    echo "BUILD_DATETIME=$BUILD_DATETIME"
+    export BUILD_NUMBER=$(cat out/soong/build_number.txt 2>/dev/null || date -u -d @$BUILD_DATETIME +%Y%m%d%H)
+    echo "BUILD_NUMBER=$BUILD_NUMBER"
     export DISPLAY_BUILD_NUMBER=true
+    export BUILD_USERNAME=aosp
+    export BUILD_HOSTNAME=aosp
   fi
+  export OVERRIDE_TARGET_FLATTEN_APEX=true
   chrt -b -p 0 $$
 }
 
@@ -573,19 +578,19 @@ release() {
     export PATH="${AOSP_BUILD_DIR}/prebuilts/jdk/jdk9/linux-x86/bin:${PATH}"
 
     log "Running sign_target_files_apks"
-    "${RELEASE_TOOLS_DIR}/releasetools/sign_target_files_apks" \
+    "${RELEASE_TOOLS_DIR}/bin/sign_target_files_apks" \
       -o -d "${KEY_DIR}" \
-      -k "${AOSP_BUILD_DIR}/build/target/product/security/networkstack=${KEY_DIR}/networkstack" "${AVB_SWITCHES[@]}" \
+      --extra_apks OsuLogin.apk,ServiceConnectivityResources.apk,ServiceWifiResources.apk="$KEY_DIR/releasekey" "${AVB_SWITCHES[@]}" \
       "${AOSP_BUILD_DIR}/out/target/product/${DEVICE}/obj/PACKAGING/target_files_intermediates/${PREFIX}${DEVICE}-target_files-${BUILD_NUMBER}.zip" \
       "${OUT}/${TARGET_FILES}"
 
     log "Running ota_from_target_files"
     # shellcheck disable=SC2068
-    "${RELEASE_TOOLS_DIR}/releasetools/ota_from_target_files" --block -k "${KEY_DIR}/releasekey" ${DEVICE_EXTRA_OTA[@]} "${OUT}/${TARGET_FILES}" \
+    "${RELEASE_TOOLS_DIR}/bin/ota_from_target_files" --block -k "${KEY_DIR}/releasekey" ${DEVICE_EXTRA_OTA[@]} "${OUT}/${TARGET_FILES}" \
       "${OUT}/${DEVICE}-ota_update-${BUILD}.zip"
 
     log "Running img_from_target_files"
-    "${RELEASE_TOOLS_DIR}/releasetools/img_from_target_files" "${OUT}/${TARGET_FILES}" "${OUT}/${DEVICE}-img-${BUILD}.zip"
+    "${RELEASE_TOOLS_DIR}/bin/img_from_target_files" "${OUT}/${TARGET_FILES}" "${OUT}/${DEVICE}-img-${BUILD}.zip"
 
     log "Running generate-factory-images"
     cd "${OUT}"
@@ -604,7 +609,7 @@ gen_keys() {
   retry curl --fail -s "https://android.googlesource.com/platform/development/+/refs/tags/${AOSP_TAG}/tools/make_key?format=TEXT" | base64 --decode > "${make_key}"
   chmod +x "${make_key}"
   avb_tool="${MISC_DIR}/avbtool"
-  retry curl --fail -s "https://android.googlesource.com/platform/external/avb/+/refs/tags/${AOSP_TAG}/avbtool?format=TEXT" | base64 --decode > "${avb_tool}"
+  retry curl --fail -s "https://android.googlesource.com/platform/external/avb/+/refs/tags/${AOSP_TAG}/avbtool.py?format=TEXT" | base64 --decode > "${avb_tool}"
   chmod +x "${avb_tool}"
 
   # generate releasekey,platform,shared,media,networkstack keys
