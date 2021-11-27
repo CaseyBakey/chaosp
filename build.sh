@@ -199,6 +199,10 @@ BROMITE_DIR="${ROOT_DIR}/bromite"
 CORE_CONFIG_REPO="https://github.com/RattlesnakeOS/core-config-repo.git"
 CUSTOM_CONFIG_REPO="https://github.com/CaseyBakey/example-custom-config-repo.git"
 
+APV_REMOTE=https://github.com/GrapheneOS/
+APV_BRANCH=12
+APV_REVISION=bde54dfa66e1092893e2c1bfa78385a35588387a
+
 full_run() {
   log_header "${FUNCNAME[0]}"
 
@@ -304,7 +308,7 @@ setup_env() {
     sudo DEBIAN_FRONTEND=noninteractive apt-get -y install apt-transport-https ca-certificates python python2.7 python3 gperf jq default-jdk git-core gnupg \
         flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev \
         x11proto-core-dev libx11-dev lib32z-dev ccache libgl1-mesa-dev libxml2-utils xsltproc unzip liblz4-tool \
-        libncurses5 wget parallel rsync python-protobuf python3-protobuf python3-pip libarchive-tools git-lfs
+        libncurses5 wget parallel rsync python-protobuf python3-protobuf python3-pip libarchive-tools git-lfs bsdtar
 
     git lfs install
     pip3 install -U protobuf
@@ -428,7 +432,7 @@ setup_vendor() {
   fi
 
   # get vendor files (with timeout)
-  timeout 30m "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/execute-all.sh" --debugfs --yes --keep --device "${DEVICE}" \
+  timeout 30m "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor/execute-all.sh" --yes --keep --device "${DEVICE}" \
       --buildID "${AOSP_BUILD_ID}" --output "${AOSP_BUILD_DIR}/vendor/android-prepare-vendor"
 
   # copy vendor files to build tree
