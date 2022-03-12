@@ -736,7 +736,7 @@ get_bromite() {
   rm -rf "${CHROMIUM_BUILD_DIR}/src/.git/rebase-apply/"
 
   CHROMIUM_VERSION=$(cat "${BROMITE_DIR}/build/RELEASE")
-  BROMITE_ARGS=$(cat "${BROMITE_DIR}/build/GN_ARGS")
+  BROMITE_ARGS=$(cat "${BROMITE_DIR}/build/bromite.gn_args")
 
   echo "Will build Chromium/Bromite ${CHROMIUM_VERSION}"
 }
