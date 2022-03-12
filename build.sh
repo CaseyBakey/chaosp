@@ -198,6 +198,7 @@ BROMITE_DIR="${ROOT_DIR}/bromite"
 
 CORE_CONFIG_REPO="https://github.com/RattlesnakeOS/core-config-repo.git"
 CUSTOM_CONFIG_REPO="https://github.com/CaseyBakey/example-custom-config-repo.git"
+CUSTOM_CONFIG_REPO_BRANCH=chaosp_12
 
 APV_REMOTE=https://github.com/GrapheneOS/
 APV_BRANCH=12
