@@ -30,6 +30,7 @@ ARGUMENT_LIST=(
     "add-bitgapps"
     "bypass-safetynet"
     "use-custom-bootanimation"
+    "use-hardened-malloc"
 )
 
 
@@ -87,6 +88,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --use-custom-bootanimation)
             USE_CUSTOM_BOOTANIMATION="true"
+            shift 2
+            ;;
+        --use-hardened-malloc)
+            USE_HARDENED_MALLOC="true"
             shift 2
             ;;
         *)
