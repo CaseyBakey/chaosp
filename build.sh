@@ -813,6 +813,11 @@ system_webview_package_name = "org.chromium.webview"
 trichrome_library_package = "org.chromium.trichromelibrary"
 ${BROMITE_ARGS}
 EOF
+    
+    #Dirty fix to delete a new conflicting line in Bromite args file
+    #Otherwise it leads to Chromium browser and apps using webview crashes
+    sed -i "/org.bromite.webview/d" out/Default/args.gn
+
     gn gen out/Default
 
     run_hook_if_exists "build_chromium_pre"
