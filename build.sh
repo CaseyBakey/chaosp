@@ -206,7 +206,7 @@ CUSTOM_CONFIG_REPO="https://github.com/CaseyBakey/example-custom-config-repo.git
 CUSTOM_CONFIG_REPO_BRANCH=chaosp_12
 
 APV_REMOTE=https://github.com/GrapheneOS/
-APV_BRANCH=12
+APV_BRANCH=12.1
 APV_REVISION=bde54dfa66e1092893e2c1bfa78385a35588387a
 
 full_run() {
