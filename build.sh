@@ -44,6 +44,8 @@ opts=$(getopt \
 
 eval set --$opts
 
+MIMICK_GOOGLE_BUILDS="false"
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --device)
@@ -477,7 +479,7 @@ env_setup_script() {
   export LANG=en_US.UTF-8
   export _JAVA_OPTIONS=-XX:-UsePerfData
   # shellcheck disable=SC2155
-  if [[ ! "${MIMICK_GOOGLE_BUILDS}" ]]; then
+  if [[ "${MIMICK_GOOGLE_BUILDS}" == "false" ]]; then
     export BUILD_DATETIME=$(cat out/build_date.txt 2>/dev/null || date -u +%s)
     echo "BUILD_DATETIME=$BUILD_DATETIME"
   # shellcheck disable=SC2155
